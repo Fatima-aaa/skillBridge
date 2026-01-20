@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const {
   sendRequest,
   getIncomingRequests,
@@ -7,6 +7,11 @@ const {
   updateRequestStatus,
   getActiveMentorship,
   getMentees,
+  pauseMentorship,
+  reactivateMentorship,
+  getStatusHistory,
+  flagPoorCommitment,
+  getMenteeDetails,
 } = require('../controllers/mentorshipController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
@@ -49,11 +54,91 @@ router.put(
     body('status')
       .notEmpty()
       .withMessage('Status is required')
-      .isIn(['accepted', 'rejected'])
-      .withMessage('Status must be either accepted or rejected'),
+      .isIn(['active', 'rejected'])
+      .withMessage('Status must be either active or rejected'),
   ],
   validate,
   updateRequestStatus
+);
+
+// Mentor oversight routes
+
+// Get mentee details with consistency summary
+router.get(
+  '/mentee/:menteeId/details',
+  protect,
+  authorize('mentor'),
+  [
+    param('menteeId').isMongoId().withMessage('Invalid mentee ID'),
+    query('weeks')
+      .optional()
+      .isInt({ min: 1, max: 52 })
+      .withMessage('Weeks must be between 1 and 52'),
+  ],
+  validate,
+  getMenteeDetails
+);
+
+// Get mentorship status history
+router.get(
+  '/:id/history',
+  protect,
+  authorize('mentor'),
+  [
+    param('id').isMongoId().withMessage('Invalid mentorship ID'),
+  ],
+  validate,
+  getStatusHistory
+);
+
+// Pause mentorship
+router.put(
+  '/:id/pause',
+  protect,
+  authorize('mentor'),
+  [
+    param('id').isMongoId().withMessage('Invalid mentorship ID'),
+    body('reason')
+      .notEmpty()
+      .withMessage('Reason is required')
+      .isLength({ max: 500 })
+      .withMessage('Reason cannot exceed 500 characters'),
+  ],
+  validate,
+  pauseMentorship
+);
+
+// Reactivate paused mentorship
+router.put(
+  '/:id/reactivate',
+  protect,
+  authorize('mentor'),
+  [
+    param('id').isMongoId().withMessage('Invalid mentorship ID'),
+    body('reason')
+      .optional()
+      .isLength({ max: 500 })
+      .withMessage('Reason cannot exceed 500 characters'),
+  ],
+  validate,
+  reactivateMentorship
+);
+
+// Flag poor commitment
+router.put(
+  '/:id/flag',
+  protect,
+  authorize('mentor'),
+  [
+    param('id').isMongoId().withMessage('Invalid mentorship ID'),
+    body('reason')
+      .notEmpty()
+      .withMessage('Reason is required')
+      .isLength({ max: 500 })
+      .withMessage('Reason cannot exceed 500 characters'),
+  ],
+  validate,
+  flagPoorCommitment
 );
 
 module.exports = router;

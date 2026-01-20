@@ -179,7 +179,7 @@ function MentorDashboard() {
                 <div style={{ marginTop: '10px' }}>
                   <button
                     className="btn btn-success"
-                    onClick={() => handleRequestAction(request._id, 'accepted')}
+                    onClick={() => handleRequestAction(request._id, 'active')}
                   >
                     Accept
                   </button>

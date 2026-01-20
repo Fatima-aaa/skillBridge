@@ -14,15 +14,27 @@ function MentorProfile() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
+  const [activeMentorship, setActiveMentorship] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
 
   useEffect(() => {
-    fetchProfile();
-  }, [id]);
+    fetchData();
+  }, [id, user]);
 
-  const fetchProfile = async () => {
+  const fetchData = async () => {
     try {
       const response = await mentorProfileAPI.getOne(id);
       setProfile(response.data.data);
+
+      // If user is a learner, also fetch their active mentorship and requests
+      if (user?.role === 'learner') {
+        const [activeRes, requestsRes] = await Promise.all([
+          mentorshipAPI.getActiveMentorship(),
+          mentorshipAPI.getMyRequests(),
+        ]);
+        setActiveMentorship(activeRes.data.data);
+        setMyRequests(requestsRes.data.data);
+      }
     } catch (err) {
       setError('Failed to load mentor profile');
     } finally {
@@ -92,30 +104,61 @@ function MentorProfile() {
       </div>
 
       {/* Request Form - Only for learners */}
-      {user?.role === 'learner' && profile.isAvailable && (
+      {user?.role === 'learner' && (
         <div className="card" style={{ marginTop: '20px' }}>
-          <h3>Send Mentorship Request</h3>
-          {error && <div className="error">{error}</div>}
-          {success && <div className="success">{success}</div>}
-          <form onSubmit={handleSendRequest}>
-            <div className="form-group">
-              <label>Message (optional)</label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={3}
-                maxLength={300}
-                placeholder="Introduce yourself and explain why you'd like this mentor..."
-              />
-            </div>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={submitting}
-            >
-              {submitting ? 'Sending...' : 'Send Request'}
-            </button>
-          </form>
+          {activeMentorship ? (
+            // Learner already has an active mentorship
+            <>
+              <h3>Mentorship Status</h3>
+              <p style={{ color: '#28a745' }}>
+                You already have an active mentorship with {activeMentorship.mentor.name}.
+              </p>
+            </>
+          ) : myRequests.some(
+              (r) => r.mentor._id === profile.user._id && r.status === 'pending'
+            ) ? (
+            // Learner has a pending request to this mentor
+            <>
+              <h3>Request Pending</h3>
+              <p style={{ color: '#ffc107' }}>
+                You already have a pending request to this mentor.
+              </p>
+            </>
+          ) : !profile.isAvailable ? (
+            // Mentor is not available
+            <>
+              <h3>Mentor Unavailable</h3>
+              <p style={{ color: '#dc3545' }}>
+                This mentor is currently at full capacity.
+              </p>
+            </>
+          ) : (
+            // Can send a request
+            <>
+              <h3>Send Mentorship Request</h3>
+              {error && <div className="error">{error}</div>}
+              {success && <div className="success">{success}</div>}
+              <form onSubmit={handleSendRequest}>
+                <div className="form-group">
+                  <label>Message (optional)</label>
+                  <textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                    maxLength={300}
+                    placeholder="Introduce yourself and explain why you'd like this mentor..."
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Sending...' : 'Send Request'}
+                </button>
+              </form>
+            </>
+          )}
         </div>
       )}
     </div>

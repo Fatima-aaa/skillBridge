@@ -14,8 +14,14 @@ const mentorshipRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'accepted', 'rejected'],
+      enum: ['pending', 'active', 'at-risk', 'paused', 'rejected'],
       default: 'pending',
+    },
+    // Track consecutive missed check-in weeks for inactivity detection
+    consecutiveMissedWeeks: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     message: {
       type: String,

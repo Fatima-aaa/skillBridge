@@ -8,10 +8,10 @@ const AppError = require('../utils/AppError');
 const createGoal = asyncHandler(async (req, res, next) => {
   const { title, description } = req.body;
 
-  // Check for active mentorship
+  // Check for active mentorship (not paused)
   const activeMentorship = await MentorshipRequest.findOne({
     learner: req.user.id,
-    status: 'accepted',
+    status: { $in: ['active', 'at-risk'] },
   });
 
   if (!activeMentorship) {
@@ -56,7 +56,7 @@ const getMenteeGoals = asyncHandler(async (req, res, next) => {
   const mentorship = await MentorshipRequest.findOne({
     mentor: req.user.id,
     learner: menteeId,
-    status: 'accepted',
+    status: { $in: ['active', 'at-risk', 'paused'] },
   });
 
   if (!mentorship) {
@@ -94,7 +94,7 @@ const getGoal = asyncHandler(async (req, res, next) => {
     const mentorship = await MentorshipRequest.findOne({
       mentor: req.user.id,
       learner: goal.learner._id,
-      status: 'accepted',
+      status: { $in: ['active', 'at-risk', 'paused'] },
     });
 
     if (!mentorship) {

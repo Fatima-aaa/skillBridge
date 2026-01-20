@@ -4,6 +4,7 @@ const mentorProfileRoutes = require('./mentorProfileRoutes');
 const mentorshipRoutes = require('./mentorshipRoutes');
 const goalRoutes = require('./goalRoutes');
 const progressRoutes = require('./progressRoutes');
+const weeklyCheckInRoutes = require('./weeklyCheckInRoutes');
 
 const router = express.Router();
 
@@ -12,5 +13,6 @@ router.use('/mentor-profiles', mentorProfileRoutes);
 router.use('/mentorships', mentorshipRoutes);
 router.use('/goals', goalRoutes);
 router.use('/progress', progressRoutes);
+router.use('/check-ins', weeklyCheckInRoutes);
 
 module.exports = router;

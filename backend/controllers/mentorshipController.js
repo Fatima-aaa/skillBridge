@@ -1,6 +1,12 @@
-const { MentorshipRequest, MentorProfile, User } = require('../models');
+const { MentorshipRequest, MentorProfile, User, MentorshipStatusLog } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
+const {
+  pauseMentorshipByMentor,
+  reactivateMentorshipByMentor,
+  getMentorshipStatusHistory,
+  getLearnerConsistencySummary,
+} = require('../services/inactivityService');
 
 // @desc    Send mentorship request (Learner)
 // @route   POST /api/mentorships
@@ -27,7 +33,7 @@ const sendRequest = asyncHandler(async (req, res, next) => {
   // Check if learner already has an active mentorship
   const activeMentorship = await MentorshipRequest.findOne({
     learner: req.user.id,
-    status: 'accepted',
+    status: { $in: ['active', 'at-risk', 'paused'] },
   });
 
   if (activeMentorship) {
@@ -99,8 +105,8 @@ const getMyRequests = asyncHandler(async (req, res, next) => {
 const updateRequestStatus = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
 
-  if (!['accepted', 'rejected'].includes(status)) {
-    return next(new AppError('Invalid status. Use accepted or rejected', 400));
+  if (!['active', 'rejected'].includes(status)) {
+    return next(new AppError('Invalid status. Use active or rejected', 400));
   }
 
   const request = await MentorshipRequest.findById(req.params.id);
@@ -120,7 +126,7 @@ const updateRequestStatus = asyncHandler(async (req, res, next) => {
   }
 
   // If accepting, check mentor capacity
-  if (status === 'accepted') {
+  if (status === 'active') {
     const mentorProfile = await MentorProfile.findOne({ user: req.user.id });
 
     if (!mentorProfile.isAvailable) {
@@ -130,7 +136,7 @@ const updateRequestStatus = asyncHandler(async (req, res, next) => {
     // Check if learner already has an active mentorship
     const activeMentorship = await MentorshipRequest.findOne({
       learner: request.learner,
-      status: 'accepted',
+      status: { $in: ['active', 'at-risk', 'paused'] },
     });
 
     if (activeMentorship) {
@@ -144,8 +150,21 @@ const updateRequestStatus = asyncHandler(async (req, res, next) => {
     );
   }
 
+  const previousStatus = request.status;
   request.status = status;
   await request.save();
+
+  // Log the status change
+  await MentorshipStatusLog.create({
+    mentorship: request._id,
+    previousStatus,
+    newStatus: status,
+    reason: status === 'active'
+      ? 'Mentorship request accepted by mentor'
+      : 'Mentorship request rejected by mentor',
+    triggeredBy: 'mentor',
+    timestamp: new Date(),
+  });
 
   res.status(200).json({
     success: true,
@@ -159,7 +178,7 @@ const updateRequestStatus = asyncHandler(async (req, res, next) => {
 const getActiveMentorship = asyncHandler(async (req, res, next) => {
   const mentorship = await MentorshipRequest.findOne({
     learner: req.user.id,
-    status: 'accepted',
+    status: { $in: ['active', 'at-risk', 'paused'] },
   }).populate('mentor', 'name email');
 
   if (!mentorship) {
@@ -181,13 +200,196 @@ const getActiveMentorship = asyncHandler(async (req, res, next) => {
 const getMentees = asyncHandler(async (req, res, next) => {
   const mentorships = await MentorshipRequest.find({
     mentor: req.user.id,
-    status: 'accepted',
+    status: { $in: ['active', 'at-risk', 'paused'] },
   }).populate('learner', 'name email');
 
   res.status(200).json({
     success: true,
     count: mentorships.length,
     data: mentorships,
+  });
+});
+
+// @desc    Pause mentorship (Mentor only)
+// @route   PUT /api/mentorships/:id/pause
+// @access  Private (Mentor only)
+const pauseMentorship = asyncHandler(async (req, res, next) => {
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length === 0) {
+    return next(new AppError('Reason is required to pause mentorship', 400));
+  }
+
+  const result = await pauseMentorshipByMentor(req.params.id, req.user.id, reason);
+
+  if (!result.success) {
+    if (result.error === 'Mentorship not found') {
+      return next(new AppError(result.error, 404));
+    }
+    if (result.error === 'Not authorized') {
+      return next(new AppError(result.error, 403));
+    }
+    return next(new AppError(result.error, 400));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: result.mentorship,
+    message: 'Mentorship paused successfully',
+  });
+});
+
+// @desc    Reactivate paused mentorship (Mentor only)
+// @route   PUT /api/mentorships/:id/reactivate
+// @access  Private (Mentor only)
+const reactivateMentorship = asyncHandler(async (req, res, next) => {
+  const { reason } = req.body;
+
+  const result = await reactivateMentorshipByMentor(
+    req.params.id,
+    req.user.id,
+    reason || 'Mentorship reactivated by mentor'
+  );
+
+  if (!result.success) {
+    if (result.error === 'Mentorship not found') {
+      return next(new AppError(result.error, 404));
+    }
+    if (result.error === 'Not authorized') {
+      return next(new AppError(result.error, 403));
+    }
+    return next(new AppError(result.error, 400));
+  }
+
+  res.status(200).json({
+    success: true,
+    data: result.mentorship,
+    message: 'Mentorship reactivated successfully',
+  });
+});
+
+// @desc    Get mentorship status history
+// @route   GET /api/mentorships/:id/history
+// @access  Private (Mentor only for their own mentorships)
+const getStatusHistory = asyncHandler(async (req, res, next) => {
+  const mentorship = await MentorshipRequest.findById(req.params.id);
+
+  if (!mentorship) {
+    return next(new AppError('Mentorship not found', 404));
+  }
+
+  // Verify mentor owns this mentorship
+  if (mentorship.mentor.toString() !== req.user.id) {
+    return next(new AppError('Not authorized to view this history', 403));
+  }
+
+  const history = await getMentorshipStatusHistory(req.params.id);
+
+  res.status(200).json({
+    success: true,
+    count: history.length,
+    data: history,
+  });
+});
+
+// @desc    Flag poor commitment (Mentor only)
+// @route   PUT /api/mentorships/:id/flag
+// @access  Private (Mentor only)
+const flagPoorCommitment = asyncHandler(async (req, res, next) => {
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length === 0) {
+    return next(new AppError('Reason is required to flag poor commitment', 400));
+  }
+
+  const mentorship = await MentorshipRequest.findById(req.params.id);
+
+  if (!mentorship) {
+    return next(new AppError('Mentorship not found', 404));
+  }
+
+  // Verify mentor owns this mentorship
+  if (mentorship.mentor.toString() !== req.user.id) {
+    return next(new AppError('Not authorized to flag this mentorship', 403));
+  }
+
+  // Can only flag active or at-risk mentorships
+  if (!['active', 'at-risk'].includes(mentorship.status)) {
+    return next(new AppError('Can only flag active or at-risk mentorships', 400));
+  }
+
+  // Move to at-risk if not already
+  if (mentorship.status === 'active') {
+    const previousStatus = mentorship.status;
+    mentorship.status = 'at-risk';
+
+    // Log the status change
+    await MentorshipStatusLog.create({
+      mentorship: mentorship._id,
+      previousStatus,
+      newStatus: 'at-risk',
+      reason: `Flagged for poor commitment: ${reason}`,
+      triggeredBy: 'mentor',
+      timestamp: new Date(),
+    });
+
+    await mentorship.save();
+  } else {
+    // Already at-risk, just log the flag
+    await MentorshipStatusLog.create({
+      mentorship: mentorship._id,
+      previousStatus: mentorship.status,
+      newStatus: mentorship.status,
+      reason: `Flagged for poor commitment (already at-risk): ${reason}`,
+      triggeredBy: 'mentor',
+      timestamp: new Date(),
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: mentorship,
+    message: 'Mentorship flagged for poor commitment',
+  });
+});
+
+// @desc    Get mentee details with consistency summary
+// @route   GET /api/mentorships/mentee/:menteeId/details
+// @access  Private (Mentor only)
+const getMenteeDetails = asyncHandler(async (req, res, next) => {
+  const { menteeId } = req.params;
+
+  // Find the mentorship
+  const mentorship = await MentorshipRequest.findOne({
+    mentor: req.user.id,
+    learner: menteeId,
+    status: { $in: ['active', 'at-risk', 'paused'] },
+  }).populate('learner', 'name email');
+
+  if (!mentorship) {
+    return next(new AppError('This learner is not your mentee', 403));
+  }
+
+  // Get consistency summary
+  const weeksBack = parseInt(req.query.weeks) || 12;
+  const summary = await getLearnerConsistencySummary(mentorship._id, weeksBack);
+
+  // Get status history
+  const history = await getMentorshipStatusHistory(mentorship._id);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      mentorship: {
+        id: mentorship._id,
+        status: mentorship.status,
+        consecutiveMissedWeeks: mentorship.consecutiveMissedWeeks,
+        createdAt: mentorship.createdAt,
+      },
+      learner: mentorship.learner,
+      consistency: summary ? summary.stats : null,
+      statusHistory: history.slice(0, 10), // Last 10 status changes
+    },
   });
 });
 
@@ -198,4 +400,9 @@ module.exports = {
   updateRequestStatus,
   getActiveMentorship,
   getMentees,
+  pauseMentorship,
+  reactivateMentorship,
+  getStatusHistory,
+  flagPoorCommitment,
+  getMenteeDetails,
 };

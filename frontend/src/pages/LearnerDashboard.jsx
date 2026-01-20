@@ -41,7 +41,10 @@ function LearnerDashboard() {
           <div className="card">
             <h4>Mentor: {activeMentorship.mentor.name}</h4>
             <p>Email: {activeMentorship.mentor.email}</p>
-            <span className="badge badge-accepted">Active</span>
+            <span className={`badge badge-${activeMentorship.status}`}>
+              {activeMentorship.status === 'at-risk' ? 'At Risk' :
+               activeMentorship.status.charAt(0).toUpperCase() + activeMentorship.status.slice(1)}
+            </span>
             <div style={{ marginTop: '15px' }}>
               <Link to="/goals" className="btn btn-primary">
                 Manage Goals

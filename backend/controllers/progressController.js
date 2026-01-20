@@ -55,7 +55,7 @@ const getProgressUpdates = asyncHandler(async (req, res, next) => {
     const mentorship = await MentorshipRequest.findOne({
       mentor: req.user.id,
       learner: goal.learner,
-      status: 'accepted',
+      status: { $in: ['active', 'at-risk', 'paused'] },
     });
 
     if (!mentorship) {

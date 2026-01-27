@@ -12,6 +12,8 @@ const {
   getStatusHistory,
   flagPoorCommitment,
   getMenteeDetails,
+  completeMentorship,
+  getCompletedMentorships,
 } = require('../controllers/mentorshipController');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
@@ -139,6 +141,28 @@ router.put(
   ],
   validate,
   flagPoorCommitment
+);
+
+// Phase 3: Completion routes
+
+// Get completed mentorships (both roles)
+router.get(
+  '/completed',
+  protect,
+  authorize('mentor', 'learner'),
+  getCompletedMentorships
+);
+
+// Complete mentorship (learner only, only when active)
+router.put(
+  '/:id/complete',
+  protect,
+  authorize('learner'),
+  [
+    param('id').isMongoId().withMessage('Invalid mentorship ID'),
+  ],
+  validate,
+  completeMentorship
 );
 
 module.exports = router;

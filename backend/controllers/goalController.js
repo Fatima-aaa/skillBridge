@@ -2,27 +2,28 @@ const { Goal, MentorshipRequest, ProgressUpdate } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 
-// @desc    Create a goal (Learner only, must have active mentorship)
+// @desc    Create a goal for mentee (Mentor only)
 // @route   POST /api/goals
-// @access  Private (Learner only)
+// @access  Private (Mentor only)
 const createGoal = asyncHandler(async (req, res, next) => {
-  const { title, description } = req.body;
+  const { title, description, menteeId } = req.body;
 
-  // Check for active mentorship (not paused)
-  const activeMentorship = await MentorshipRequest.findOne({
-    learner: req.user.id,
+  // Find the mentorship where the current user is the mentor and menteeId is the learner
+  const mentorship = await MentorshipRequest.findOne({
+    mentor: req.user.id,
+    learner: menteeId,
     status: { $in: ['active', 'at-risk'] },
   });
 
-  if (!activeMentorship) {
+  if (!mentorship) {
     return next(
-      new AppError('You must have an active mentorship to create goals', 400)
+      new AppError('You do not have an active mentorship with this learner', 400)
     );
   }
 
   const goal = await Goal.create({
-    mentorship: activeMentorship._id,
-    learner: req.user.id,
+    mentorship: mentorship._id,
+    learner: menteeId,
     title,
     description,
   });
@@ -108,9 +109,9 @@ const getGoal = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Update goal status (Learner only)
+// @desc    Update goal status (Mentor only - mark as completed)
 // @route   PUT /api/goals/:id
-// @access  Private (Learner only)
+// @access  Private (Mentor only)
 const updateGoal = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
 
@@ -120,8 +121,14 @@ const updateGoal = asyncHandler(async (req, res, next) => {
     return next(new AppError('Goal not found', 404));
   }
 
-  // Verify ownership
-  if (goal.learner.toString() !== req.user.id) {
+  // Verify mentor has mentorship with this learner
+  const mentorship = await MentorshipRequest.findOne({
+    mentor: req.user.id,
+    learner: goal.learner,
+    status: { $in: ['active', 'at-risk', 'paused'] },
+  });
+
+  if (!mentorship) {
     return next(new AppError('Not authorized to update this goal', 403));
   }
 

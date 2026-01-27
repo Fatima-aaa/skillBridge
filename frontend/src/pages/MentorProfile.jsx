@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { mentorProfileAPI, mentorshipAPI } from '../services/api';
+import { mentorProfileAPI, mentorshipAPI, reviewAPI } from '../services/api';
 
 function MentorProfile() {
   const { id } = useParams();
@@ -9,6 +9,7 @@ function MentorProfile() {
   const { user } = useAuth();
 
   const [profile, setProfile] = useState(null);
+  const [mentorRating, setMentorRating] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -23,8 +24,19 @@ function MentorProfile() {
 
   const fetchData = async () => {
     try {
-      const response = await mentorProfileAPI.getOne(id);
-      setProfile(response.data.data);
+      const profileRes = await mentorProfileAPI.getOne(id);
+      // Handle both old format (direct profile) and new format (profile wrapper with reputation)
+      const profileData = profileRes.data.data.profile || profileRes.data.data;
+      setProfile(profileData);
+
+      // Fetch mentor rating
+      try {
+        const ratingRes = await reviewAPI.getMentorRatings(profileData.user._id);
+        setMentorRating(ratingRes.data.stats);
+      } catch (err) {
+        // No ratings yet, that's fine
+        setMentorRating(null);
+      }
 
       // If user is a learner, also fetch their active mentorship and requests
       if (user?.role === 'learner') {
@@ -62,6 +74,20 @@ function MentorProfile() {
     }
   };
 
+  const renderStars = (rating) => {
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+
+    return (
+      <span style={{ color: '#ffc107', fontSize: '1.2em' }}>
+        {'★'.repeat(fullStars)}
+        {hasHalfStar && '½'}
+        {'☆'.repeat(emptyStars)}
+      </span>
+    );
+  };
+
   if (loading) return <div>Loading...</div>;
   if (!profile) return <div className="error">Mentor not found</div>;
 
@@ -78,6 +104,21 @@ function MentorProfile() {
       <div className="card">
         <h2>{profile.user.name}</h2>
         <p>{profile.user.email}</p>
+
+        {/* Rating Display */}
+        {mentorRating && (
+          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {renderStars(mentorRating.averageRating)}
+              <span style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+                {mentorRating.averageRating.toFixed(1)}
+              </span>
+              <span style={{ color: '#6c757d' }}>
+                ({mentorRating.totalRatings} {mentorRating.totalRatings === 1 ? 'rating' : 'ratings'})
+              </span>
+            </div>
+          </div>
+        )}
 
         <h4 style={{ marginTop: '20px' }}>Skills</h4>
         <div className="skills-list">
@@ -110,8 +151,9 @@ function MentorProfile() {
             // Learner already has an active mentorship
             <>
               <h3>Mentorship Status</h3>
-              <p style={{ color: '#28a745' }}>
+              <p style={{ color: '#856404' }}>
                 You already have an active mentorship with {activeMentorship.mentor.name}.
+                Complete your current mentorship before requesting a new one.
               </p>
             </>
           ) : myRequests.some(
@@ -120,7 +162,7 @@ function MentorProfile() {
             // Learner has a pending request to this mentor
             <>
               <h3>Request Pending</h3>
-              <p style={{ color: '#ffc107' }}>
+              <p style={{ color: '#856404' }}>
                 You already have a pending request to this mentor.
               </p>
             </>

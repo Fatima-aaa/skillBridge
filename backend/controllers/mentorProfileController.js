@@ -1,6 +1,10 @@
 const { MentorProfile, User } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
+const {
+  getMentorProfileWithReputation,
+  getAllMentorsWithReputation,
+} = require('../services/reputationService');
 
 // @desc    Create mentor profile
 // @route   POST /api/mentor-profiles
@@ -89,22 +93,63 @@ const getMyProfile = asyncHandler(async (req, res, next) => {
 // @desc    Get all mentor profiles (for learners to browse)
 // @route   GET /api/mentor-profiles
 // @access  Private
+// @query   sortBy - rating, experience, trust, reviews, newest (default: rating)
+// @query   onlyAvailable - true/false (default: false)
+// @query   includeReputation - true/false (default: true)
 const getAllProfiles = asyncHandler(async (req, res, next) => {
-  const profiles = await MentorProfile.find()
-    .populate('user', 'name email')
-    .select('-__v');
+  const { sortBy, onlyAvailable, includeReputation } = req.query;
+
+  // If reputation not needed, return basic profiles (backward compatible)
+  if (includeReputation === 'false') {
+    const profiles = await MentorProfile.find()
+      .populate('user', 'name email')
+      .select('-__v');
+
+    return res.status(200).json({
+      success: true,
+      count: profiles.length,
+      data: profiles,
+    });
+  }
+
+  // Get profiles with reputation data
+  const mentors = await getAllMentorsWithReputation({
+    sortBy: sortBy || 'rating',
+    onlyAvailable: onlyAvailable === 'true',
+  });
 
   res.status(200).json({
     success: true,
-    count: profiles.length,
-    data: profiles,
+    count: mentors.length,
+    data: mentors,
   });
 });
 
 // @desc    Get single mentor profile by ID
 // @route   GET /api/mentor-profiles/:id
 // @access  Private
+// @query   includeReputation - true/false (default: true)
 const getProfile = asyncHandler(async (req, res, next) => {
+  const { includeReputation } = req.query;
+
+  // If reputation not needed, return basic profile (backward compatible)
+  if (includeReputation === 'false') {
+    const profile = await MentorProfile.findById(req.params.id).populate(
+      'user',
+      'name email'
+    );
+
+    if (!profile) {
+      return next(new AppError('Profile not found', 404));
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: profile,
+    });
+  }
+
+  // Get profile by ID
   const profile = await MentorProfile.findById(req.params.id).populate(
     'user',
     'name email'
@@ -114,9 +159,12 @@ const getProfile = asyncHandler(async (req, res, next) => {
     return next(new AppError('Profile not found', 404));
   }
 
+  // Get profile with reputation
+  const profileWithReputation = await getMentorProfileWithReputation(profile.user._id);
+
   res.status(200).json({
     success: true,
-    data: profile,
+    data: profileWithReputation,
   });
 });
 

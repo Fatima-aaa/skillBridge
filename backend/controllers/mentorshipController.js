@@ -6,7 +6,9 @@ const {
   reactivateMentorshipByMentor,
   getMentorshipStatusHistory,
   getLearnerConsistencySummary,
+  processInactivityForMentorship,
 } = require('../services/inactivityService');
+const { getLearnerReliabilitySummary } = require('../services/reliabilityService');
 
 // @desc    Send mentorship request (Learner)
 // @route   POST /api/mentorships
@@ -68,12 +70,38 @@ const sendRequest = asyncHandler(async (req, res, next) => {
 // @desc    Get incoming requests (Mentor)
 // @route   GET /api/mentorships/requests
 // @access  Private (Mentor only)
+// @query   includeReliability - true/false (default: true for pending requests)
 const getIncomingRequests = asyncHandler(async (req, res, next) => {
+  const { includeReliability } = req.query;
+
   const requests = await MentorshipRequest.find({
     mentor: req.user.id,
   })
     .populate('learner', 'name email')
     .sort('-createdAt');
+
+  // Include reliability info for pending requests by default
+  if (includeReliability !== 'false') {
+    const requestsWithReliability = await Promise.all(
+      requests.map(async (request) => {
+        const requestObj = request.toObject();
+
+        // Only add reliability for pending requests
+        if (request.status === 'pending') {
+          const reliability = await getLearnerReliabilitySummary(request.learner._id);
+          requestObj.learnerReliability = reliability;
+        }
+
+        return requestObj;
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: requestsWithReliability.length,
+      data: requestsWithReliability,
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -176,7 +204,7 @@ const updateRequestStatus = asyncHandler(async (req, res, next) => {
 // @route   GET /api/mentorships/active
 // @access  Private (Learner only)
 const getActiveMentorship = asyncHandler(async (req, res, next) => {
-  const mentorship = await MentorshipRequest.findOne({
+  let mentorship = await MentorshipRequest.findOne({
     learner: req.user.id,
     status: { $in: ['active', 'at-risk', 'paused'] },
   }).populate('mentor', 'name email');
@@ -186,6 +214,14 @@ const getActiveMentorship = asyncHandler(async (req, res, next) => {
       success: true,
       data: null,
     });
+  }
+
+  // Check for inactivity and update status if needed (on dashboard load)
+  if (['active', 'at-risk'].includes(mentorship.status)) {
+    mentorship = await processInactivityForMentorship(mentorship._id);
+    // Re-populate mentor info after potential status change
+    mentorship = await MentorshipRequest.findById(mentorship._id)
+      .populate('mentor', 'name email');
   }
 
   res.status(200).json({
@@ -393,6 +429,87 @@ const getMenteeDetails = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Complete mentorship (Learner only, only when active)
+// @route   PUT /api/mentorships/:id/complete
+// @access  Private (Learner who is part of the mentorship)
+const completeMentorship = asyncHandler(async (req, res, next) => {
+  const mentorship = await MentorshipRequest.findById(req.params.id);
+
+  if (!mentorship) {
+    return next(new AppError('Mentorship not found', 404));
+  }
+
+  // Only learner can complete the mentorship
+  const isLearner = mentorship.learner.toString() === req.user.id;
+
+  if (!isLearner) {
+    return next(new AppError('Only the learner can mark the mentorship as completed', 403));
+  }
+
+  // Can only complete active mentorships (not at-risk or paused)
+  if (mentorship.status !== 'active') {
+    if (mentorship.status === 'at-risk') {
+      return next(new AppError('Cannot complete mentorship while at risk. Please update your goal progress first.', 400));
+    }
+    if (mentorship.status === 'paused') {
+      return next(new AppError('Cannot complete mentorship while paused. Ask your mentor to resume it first.', 400));
+    }
+    return next(new AppError('Can only complete active mentorships', 400));
+  }
+
+  const previousStatus = mentorship.status;
+  mentorship.status = 'completed';
+  mentorship.completedAt = new Date();
+  mentorship.completionReason = 'learner_ended';
+  await mentorship.save();
+
+  // Decrement mentor's current mentee count
+  await MentorProfile.findOneAndUpdate(
+    { user: mentorship.mentor },
+    { $inc: { currentMenteeCount: -1 } }
+  );
+
+  // Log the status change
+  await MentorshipStatusLog.create({
+    mentorship: mentorship._id,
+    previousStatus,
+    newStatus: 'completed',
+    reason: 'Mentorship completed by learner',
+    triggeredBy: 'system',
+    timestamp: new Date(),
+  });
+
+  res.status(200).json({
+    success: true,
+    data: mentorship,
+    message: 'Mentorship completed successfully. You can now rate your mentor.',
+  });
+});
+
+// @desc    Get completed mentorships for current user
+// @route   GET /api/mentorships/completed
+// @access  Private (Mentor or Learner)
+const getCompletedMentorships = asyncHandler(async (req, res, next) => {
+  let query = {};
+
+  if (req.user.role === 'mentor') {
+    query = { mentor: req.user.id, status: 'completed' };
+  } else {
+    query = { learner: req.user.id, status: 'completed' };
+  }
+
+  const mentorships = await MentorshipRequest.find(query)
+    .populate('learner', 'name email')
+    .populate('mentor', 'name email')
+    .sort('-completedAt');
+
+  res.status(200).json({
+    success: true,
+    count: mentorships.length,
+    data: mentorships,
+  });
+});
+
 module.exports = {
   sendRequest,
   getIncomingRequests,
@@ -405,4 +522,6 @@ module.exports = {
   getStatusHistory,
   flagPoorCommitment,
   getMenteeDetails,
+  completeMentorship,
+  getCompletedMentorships,
 };

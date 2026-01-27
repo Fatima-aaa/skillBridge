@@ -1,34 +1,23 @@
-const { MentorshipRequest, WeeklyCheckIn, MentorshipStatusLog, Goal } = require('../models');
+const { MentorshipRequest, MentorshipStatusLog, Goal, ProgressUpdate } = require('../models');
 
 /**
  * Inactivity Detection Service
- * Handles system-enforced accountability for missed check-ins
+ * Handles system-enforced accountability based on goal progress updates
+ *
+ * Rules:
+ * - 1 week without progress update on any goal → at-risk
+ * - 2 weeks without progress update → paused
+ * - Only mentor can resume a paused mentorship
  */
 
 /**
- * Get the week boundaries for a given date (Monday to Sunday)
+ * Get the date X days ago
  */
-const getWeekBoundaries = (date = new Date()) => {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
-  monday.setHours(0, 0, 0, 0);
-
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-  sunday.setHours(23, 59, 59, 999);
-
-  return { weekStart: monday, weekEnd: sunday };
-};
-
-/**
- * Get the previous week boundaries
- */
-const getPreviousWeekBoundaries = (date = new Date()) => {
-  const d = new Date(date);
-  d.setDate(d.getDate() - 7);
-  return getWeekBoundaries(d);
+const getDaysAgo = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  date.setHours(0, 0, 0, 0);
+  return date;
 };
 
 /**
@@ -70,59 +59,57 @@ const updateMentorshipStatus = async (mentorship, newStatus, reason, triggeredBy
 };
 
 /**
- * Check for missed check-ins for a specific mentorship
- * Returns the number of consecutive weeks without check-ins
+ * Check for inactivity based on progress updates for a specific mentorship
+ * Returns the number of days since last progress update
  */
-const checkMissedCheckIns = async (mentorshipId) => {
+const checkInactivity = async (mentorshipId) => {
   const mentorship = await MentorshipRequest.findById(mentorshipId);
   if (!mentorship || !['active', 'at-risk'].includes(mentorship.status)) {
-    return { missed: 0, lastCheckIn: null };
+    return { daysSinceUpdate: 0, lastProgressUpdate: null };
   }
 
-  // Get all active goals for this mentorship
+  // Get all goals for this mentorship
   const goals = await Goal.find({
     mentorship: mentorshipId,
-    status: 'active',
   });
 
   if (goals.length === 0) {
-    return { missed: 0, lastCheckIn: null };
+    // No goals set by mentor yet - don't penalize learner
+    return { daysSinceUpdate: 0, lastProgressUpdate: null };
   }
 
-  // Check the last few weeks for check-ins
-  let consecutiveMissed = 0;
-  let lastCheckInDate = null;
-  const today = new Date();
+  const goalIds = goals.map(g => g._id);
 
-  // Check up to 4 weeks back
-  for (let weeksBack = 1; weeksBack <= 4; weeksBack++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - (weeksBack * 7));
-    const { weekStart, weekEnd } = getWeekBoundaries(checkDate);
+  // Find the most recent progress update across all goals
+  const lastUpdate = await ProgressUpdate.findOne({
+    goal: { $in: goalIds },
+  }).sort({ createdAt: -1 });
 
-    // Check if any goal has a check-in for this week
-    const checkInsForWeek = await WeeklyCheckIn.find({
-      mentorship: mentorshipId,
-      weekStartDate: weekStart,
-    });
-
-    if (checkInsForWeek.length === 0) {
-      consecutiveMissed++;
-    } else {
-      // Found a check-in, stop counting
-      if (!lastCheckInDate) {
-        lastCheckInDate = checkInsForWeek[0].submittedAt;
-      }
-      break;
-    }
+  if (!lastUpdate) {
+    // No progress updates yet - check how long since mentorship became active or first goal was created
+    const oldestGoal = goals.reduce((oldest, goal) =>
+      goal.createdAt < oldest.createdAt ? goal : oldest
+    );
+    const daysSinceGoalCreated = Math.floor(
+      (new Date() - new Date(oldestGoal.createdAt)) / (1000 * 60 * 60 * 24)
+    );
+    return { daysSinceUpdate: daysSinceGoalCreated, lastProgressUpdate: null };
   }
 
-  return { missed: consecutiveMissed, lastCheckIn: lastCheckInDate };
+  const daysSinceUpdate = Math.floor(
+    (new Date() - new Date(lastUpdate.createdAt)) / (1000 * 60 * 60 * 24)
+  );
+
+  return { daysSinceUpdate, lastProgressUpdate: lastUpdate.createdAt };
 };
 
 /**
  * Process inactivity for a single mentorship
- * This should be called periodically (e.g., via cron job) or on-demand
+ * Called on dashboard load to check if status should change
+ *
+ * Rules:
+ * - 7+ days without progress update → at-risk
+ * - 14+ days without progress update → paused
  */
 const processInactivityForMentorship = async (mentorshipId) => {
   const mentorship = await MentorshipRequest.findById(mentorshipId);
@@ -136,33 +123,38 @@ const processInactivityForMentorship = async (mentorshipId) => {
     return mentorship;
   }
 
-  const { missed, lastCheckIn } = await checkMissedCheckIns(mentorshipId);
-
-  // Update consecutive missed weeks counter
-  mentorship.consecutiveMissedWeeks = missed;
-  await mentorship.save();
+  const { daysSinceUpdate, lastProgressUpdate } = await checkInactivity(mentorshipId);
 
   const context = {
-    consecutiveMissedWeeks: missed,
-    lastCheckInDate: lastCheckIn,
+    daysSinceUpdate,
+    lastProgressUpdate,
   };
 
-  // Apply state transitions based on missed weeks
-  if (missed >= 3 && mentorship.status === 'at-risk') {
-    // Continued inactivity after at-risk -> pause
+  // Apply state transitions based on days since last progress update
+  if (daysSinceUpdate >= 14 && mentorship.status === 'at-risk') {
+    // 2 weeks without progress while at-risk -> paused
     await updateMentorshipStatus(
       mentorship,
       'paused',
-      `Continued inactivity: ${missed} consecutive weeks without check-ins`,
+      `Mentorship paused: ${daysSinceUpdate} days without progress update`,
       'system',
       context
     );
-  } else if (missed >= 2 && mentorship.status === 'active') {
-    // 2 missed weeks -> at-risk
+  } else if (daysSinceUpdate >= 14 && mentorship.status === 'active') {
+    // Jump straight to paused if 2+ weeks inactive
+    await updateMentorshipStatus(
+      mentorship,
+      'paused',
+      `Mentorship paused: ${daysSinceUpdate} days without progress update`,
+      'system',
+      context
+    );
+  } else if (daysSinceUpdate >= 7 && mentorship.status === 'active') {
+    // 1 week without progress -> at-risk
     await updateMentorshipStatus(
       mentorship,
       'at-risk',
-      `Inactivity detected: ${missed} consecutive weeks without check-ins`,
+      `Inactivity warning: ${daysSinceUpdate} days without progress update`,
       'system',
       context
     );
@@ -194,18 +186,15 @@ const processAllInactivity = async () => {
 };
 
 /**
- * Reset inactivity when a check-in is submitted
- * This should be called after a successful check-in submission
+ * Reset inactivity when a progress update is submitted
+ * This should be called after a successful progress update submission
  */
-const resetInactivityOnCheckIn = async (mentorshipId) => {
+const resetInactivityOnProgressUpdate = async (mentorshipId) => {
   const mentorship = await MentorshipRequest.findById(mentorshipId);
 
   if (!mentorship) {
     return null;
   }
-
-  // Reset consecutive missed weeks
-  mentorship.consecutiveMissedWeeks = 0;
 
   // If mentorship was at-risk due to inactivity, move back to active
   if (mentorship.status === 'at-risk') {
@@ -216,21 +205,22 @@ const resetInactivityOnCheckIn = async (mentorshipId) => {
       mentorship,
       previousStatus,
       'active',
-      'Check-in submitted, inactivity counter reset',
+      'Progress update submitted, mentorship restored to active',
       'system',
-      { consecutiveMissedWeeks: 0, lastCheckInDate: new Date() }
+      { lastProgressUpdate: new Date() }
     );
+
+    await mentorship.save();
   }
 
-  await mentorship.save();
   return mentorship;
 };
 
 /**
- * Get learner consistency summary for a mentorship
- * Returns check-in history with missed weeks clearly marked
+ * Get learner activity summary for a mentorship
+ * Returns progress update history
  */
-const getLearnerConsistencySummary = async (mentorshipId, weeksBack = 12) => {
+const getLearnerConsistencySummary = async (mentorshipId, daysBack = 30) => {
   const mentorship = await MentorshipRequest.findById(mentorshipId)
     .populate('learner', 'name email');
 
@@ -241,66 +231,40 @@ const getLearnerConsistencySummary = async (mentorshipId, weeksBack = 12) => {
   const goals = await Goal.find({ mentorship: mentorshipId });
   const goalIds = goals.map(g => g._id);
 
+  // Get progress updates in the time period
+  const startDate = getDaysAgo(daysBack);
+  const progressUpdates = await ProgressUpdate.find({
+    goal: { $in: goalIds },
+    createdAt: { $gte: startDate },
+  })
+    .populate('goal', 'title')
+    .sort({ createdAt: -1 });
+
+  // Calculate stats
+  const { daysSinceUpdate, lastProgressUpdate } = await checkInactivity(mentorshipId);
+
   const summary = {
     mentorship: {
       id: mentorship._id,
       status: mentorship.status,
-      consecutiveMissedWeeks: mentorship.consecutiveMissedWeeks,
+      daysSinceLastUpdate: daysSinceUpdate,
     },
     learner: mentorship.learner,
-    weeks: [],
+    progressUpdates: progressUpdates.map(pu => ({
+      id: pu._id,
+      goal: pu.goal,
+      content: pu.content,
+      createdAt: pu.createdAt,
+    })),
     stats: {
-      totalWeeks: weeksBack,
-      submittedWeeks: 0,
-      missedWeeks: 0,
-      lateSubmissions: 0,
+      totalGoals: goals.length,
+      activeGoals: goals.filter(g => g.status === 'active').length,
+      completedGoals: goals.filter(g => g.status === 'completed').length,
+      totalProgressUpdates: progressUpdates.length,
+      daysSinceLastUpdate: daysSinceUpdate,
+      lastProgressUpdate,
     },
   };
-
-  const today = new Date();
-
-  // Build week-by-week summary
-  for (let i = 0; i < weeksBack; i++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - (i * 7));
-    const { weekStart, weekEnd } = getWeekBoundaries(checkDate);
-
-    const checkIns = await WeeklyCheckIn.find({
-      goal: { $in: goalIds },
-      weekStartDate: weekStart,
-    }).populate('goal', 'title');
-
-    const weekData = {
-      weekStart,
-      weekEnd,
-      checkIns: checkIns.map(ci => ({
-        id: ci._id,
-        goal: ci.goal,
-        plannedTasks: ci.plannedTasks.length,
-        completedTasks: ci.completedTasks.length,
-        submittedAt: ci.submittedAt,
-        isLate: ci.isLate,
-      })),
-      status: 'missed',
-    };
-
-    if (checkIns.length > 0) {
-      weekData.status = checkIns.some(ci => ci.isLate) ? 'late' : 'submitted';
-      summary.stats.submittedWeeks++;
-      if (checkIns.some(ci => ci.isLate)) {
-        summary.stats.lateSubmissions++;
-      }
-    } else {
-      // Only count as missed if the week has ended
-      if (weekEnd < today) {
-        summary.stats.missedWeeks++;
-      } else {
-        weekData.status = 'current';
-      }
-    }
-
-    summary.weeks.push(weekData);
-  }
 
   return summary;
 };
@@ -377,12 +341,11 @@ const getMentorshipStatusHistory = async (mentorshipId) => {
 };
 
 module.exports = {
-  getWeekBoundaries,
-  getPreviousWeekBoundaries,
-  checkMissedCheckIns,
+  getDaysAgo,
+  checkInactivity,
   processInactivityForMentorship,
   processAllInactivity,
-  resetInactivityOnCheckIn,
+  resetInactivityOnProgressUpdate,
   getLearnerConsistencySummary,
   pauseMentorshipByMentor,
   reactivateMentorshipByMentor,

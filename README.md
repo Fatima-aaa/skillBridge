@@ -1,538 +1,285 @@
-# SkillBridge - Mentorship & Accountability Platform
+# SkillBridge
 
-SkillBridge is a MERN stack application that connects learners with mentors and helps learners stay accountable through goals and progress tracking.
-
-## Table of Contents
-
-1. [Architecture Overview](#architecture-overview)
-2. [Data Models & Relationships](#data-models--relationships)
-3. [Authorization Logic](#authorization-logic)
-4. [API Routes Reference](#api-routes-reference)
-5. [Setup Instructions](#setup-instructions)
-6. [Testing the Application](#testing-the-application)
+SkillBridge connects learners with mentors and helps you stay on track with your learning goals.
 
 ---
 
-## Architecture Overview
+## What Can You Do?
 
-### Tech Stack
-- **Backend**: Node.js, Express.js, MongoDB (Mongoose)
-- **Frontend**: React (Vite), React Router, Axios
-- **Authentication**: JWT (JSON Web Tokens)
+### As a Learner
 
-### Project Structure
+**Find a Mentor**
+- Browse available mentors sorted by rating, experience, or trust score
+- View mentor profiles with their skills, bio, and reputation stats
+- See how many spots each mentor has available
+- Send a mentorship request with a personal message
+- You can only have one active mentor at a time
 
-```
-skillBridge/
-├── backend/
-│   ├── config/
-│   │   └── db.js              # MongoDB connection
-│   ├── controllers/
-│   │   ├── authController.js       # Auth logic
-│   │   ├── mentorProfileController.js
-│   │   ├── mentorshipController.js
-│   │   ├── goalController.js
-│   │   └── progressController.js
-│   ├── middleware/
-│   │   ├── auth.js            # JWT verification & role authorization
-│   │   ├── errorHandler.js    # Centralized error handling
-│   │   └── validate.js        # Input validation middleware
-│   ├── models/
-│   │   ├── User.js
-│   │   ├── MentorProfile.js
-│   │   ├── MentorshipRequest.js
-│   │   ├── Goal.js
-│   │   └── ProgressUpdate.js
-│   ├── routes/
-│   │   ├── authRoutes.js
-│   │   ├── mentorProfileRoutes.js
-│   │   ├── mentorshipRoutes.js
-│   │   ├── goalRoutes.js
-│   │   └── progressRoutes.js
-│   ├── utils/
-│   │   ├── AppError.js        # Custom error class
-│   │   └── asyncHandler.js    # Async/await error wrapper
-│   └── server.js              # Express app entry point
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── context/
-│   │   ├── pages/
-│   │   └── services/
-│   └── ...
-└── README.md
-```
+**Work with Your Mentor**
+- Once your mentor accepts, they can create learning goals for you
+- View your goals and their status (active, completed)
+- Post progress updates on your goals
+- Your mentor tracks your progress and can mark goals complete
 
----
+**Stay Accountable**
+- Submit weekly check-ins for each goal (what you planned, what you did, any blockers)
+- If you miss check-ins for 2 weeks, your mentorship goes to "at-risk" status
+- Miss 3 weeks and your mentorship gets paused until your mentor reactivates it
+- Submitting a check-in brings you back to good standing
 
-## Data Models & Relationships
+**Complete Your Mentorship**
+- When you've achieved your goals, you can mark the mentorship as complete
+- You can only complete a mentorship when it's in "active" status (not at-risk or paused)
+- After completion, you can rate your mentor (1-5 stars, anonymous)
+- Your check-in consistency affects your reliability score that future mentors can see
 
-### 1. User Model
-The base authentication model for all users.
+### As a Mentor
 
-```javascript
-{
-  name: String,           // Required, max 50 chars
-  email: String,          // Required, unique, validated
-  password: String,       // Required, min 6 chars, hashed with bcrypt
-  role: 'learner' | 'mentor',  // Required
-  timestamps: true
-}
-```
+**Create Your Profile**
+- Set up your profile with your skills, bio, and how many learners you can take
+- Your profile is visible to all learners looking for mentors
+- Your reputation builds over time based on learner reviews
 
-**Key Features:**
-- Password is automatically hashed before saving using bcrypt
-- Includes method to compare passwords and generate JWT tokens
-- Password field excluded from queries by default (`select: false`)
+**Manage Mentorship Requests**
+- See incoming requests from learners
+- View learner reliability scores and warnings before accepting (see Reliability Score section below)
+- Accept or reject requests based on your availability
 
-### 2. MentorProfile Model
-Extended profile information for mentors.
+**Track Your Mentees**
+- See all your active mentees on your dashboard
+- Create and manage goals for each mentee
+- View their progress updates and weekly check-ins
+- Check their consistency stats and mentorship status history
 
-```javascript
-{
-  user: ObjectId,         // References User, unique (1:1 relationship)
-  skills: [String],       // Required, at least one skill
-  bio: String,            // Optional, max 500 chars
-  capacity: Number,       // Required, 1-20 mentees max
-  currentMenteeCount: Number,  // Auto-tracked
-  timestamps: true
-}
-```
+**Handle Inactive Learners**
+- The system automatically flags learners who miss check-ins
+- Mentorships go to "at-risk" after 2 missed weeks, "paused" after 3
+- You can manually reactivate paused mentorships
+- You can flag learners for poor commitment (moves them to at-risk)
 
-**Key Features:**
-- One-to-one relationship with User (mentor)
-- Virtual `isAvailable` property computed from capacity vs currentMenteeCount
-- Skills are indexed for efficient filtering
+**Give Feedback**
+- After a mentorship ends, rate your learner (1-5 stars)
+- Your rating is anonymous - learners see aggregate scores only
+- Your feedback contributes to their reliability score for future mentors
 
-### 3. MentorshipRequest Model
-Tracks mentorship connections between learners and mentors.
-
-```javascript
-{
-  learner: ObjectId,      // References User (learner)
-  mentor: ObjectId,       // References User (mentor)
-  status: 'pending' | 'accepted' | 'rejected',
-  message: String,        // Optional request message, max 300 chars
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Compound index prevents duplicate pending requests
-- Status transitions: pending → accepted/rejected (one-way)
-- A learner can only have ONE active (accepted) mentorship
-
-### 4. Goal Model
-Learning goals created by learners within their mentorship.
-
-```javascript
-{
-  mentorship: ObjectId,   // References MentorshipRequest
-  learner: ObjectId,      // References User (learner) - denormalized for queries
-  title: String,          // Required, max 100 chars
-  description: String,    // Required, max 500 chars
-  status: 'active' | 'completed',
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Goals belong to a specific mentorship relationship
-- Learner reference is denormalized for efficient queries
-- Only learners with active mentorships can create goals
-
-### 5. ProgressUpdate Model
-Progress reports for goals.
-
-```javascript
-{
-  goal: ObjectId,         // References Goal
-  learner: ObjectId,      // References User (learner)
-  content: String,        // Required, max 1000 chars
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Multiple updates per goal (append-only log)
-- Indexed by goal and creation time for efficient retrieval
-
-### Entity Relationship Diagram
-
-```
-User (1) ─────────────── (0..1) MentorProfile
-  │                              (mentor only)
-  │
-  ├── as Learner ───────── (*) MentorshipRequest
-  │                              │
-  ├── as Mentor ────────── (*) MentorshipRequest
-  │                              │
-  │                              └── (1) ─── (*) Goal
-  │                                           │
-  │                                           └── (*) ProgressUpdate
-  └── (denormalized refs in Goal, ProgressUpdate)
-```
+**Build Your Reputation**
+- Learners can rate you after mentorship ends (1-5 stars)
+- Your average rating is visible on your profile
+- Higher ratings and more completed mentorships improve your visibility
 
 ---
 
-## Authorization Logic
+## Scoring Systems
 
-### Role-Based Access Control (RBAC)
+### Learner Reliability Score (0-100)
 
-The application implements two-level authorization:
+When a learner sends you a mentorship request, you see their reliability score calculated from their history:
 
-1. **Authentication** (`protect` middleware): Verifies JWT token
-2. **Authorization** (`authorize` middleware): Checks user role
+**Components:**
 
-### Route Protection Matrix
+| Component | Points | How It's Calculated |
+|-----------|--------|---------------------|
+| Mentor Feedback | 0-40 | `(averageRating / 5) * 40` |
+| Check-in Consistency | 0-30 | `(weeksWithCheckIns / totalWeeks) * 30` |
+| Completion History | 0-30 | `(completionRate / 100) * 20 + stickWithItBonus` |
 
-| Route | Learner | Mentor | Notes |
-|-------|---------|--------|-------|
-| `POST /api/auth/register` | Yes | Yes | Public |
-| `POST /api/auth/login` | Yes | Yes | Public |
-| `GET /api/auth/me` | Yes | Yes | Authenticated |
-| `GET /api/mentor-profiles` | Yes | Yes | View all mentors |
-| `POST /api/mentor-profiles` | No | Yes | Create own profile |
-| `PUT /api/mentor-profiles` | No | Yes | Update own profile |
-| `POST /api/mentorships` | Yes | No | Send request |
-| `GET /api/mentorships/requests` | No | Yes | View incoming |
-| `PUT /api/mentorships/:id` | No | Yes | Accept/reject |
-| `POST /api/goals` | Yes | No | Must have active mentorship |
-| `GET /api/goals/mentee/:id` | No | Yes | Only own mentees |
-| `POST /api/progress/:goalId` | Yes | No | Own goals only |
-| `GET /api/progress/:goalId` | Yes | Yes | With ownership check |
+**Stick-with-it Bonus:** Up to 10 extra points for not ending mentorships early
+```
+stickWithItBonus = ((100 - earlyTerminationRate) / 100) * 10
+```
 
-### Ownership Checks
+**Risk Levels:**
+| Score | Risk Level | Display Color |
+|-------|------------|---------------|
+| 70-100 | Low | Green |
+| 50-69 | Medium | Yellow |
+| 0-49 | High | Red |
 
-Beyond role-based access, the application enforces ownership:
+**Warning Messages:**
 
-1. **Learners can only:**
-   - Create goals for their own active mentorship
-   - Update their own goals
-   - Submit progress for their own goals
-   - View their own requests and goals
+Mentors see warnings when:
+| Warning | Triggered When |
+|---------|----------------|
+| "This learner has a low reliability score" | Score below 50 |
+| "This learner has ended mentorships early in the past" | Early termination rate > 30% |
+| "This learner has inconsistent check-in history" | Check-in consistency < 50% |
+| "Previous mentors have reported concerns" | Average rating < 2.5 |
 
-2. **Mentors can only:**
-   - Update their own profile
-   - Accept/reject requests sent to them
-   - View goals of their accepted mentees
+**Notes:**
+- New learners show "New learner - no history yet"
+- Score only calculates when there's enough data (at least 1 feedback OR 4 weeks of check-in history)
+- Default values (neutral) are used for missing components
 
-### Business Rules Enforced
+### Mentor Reputation Score
 
-1. **Single Active Mentorship**: A learner can have only one accepted mentorship at a time
-2. **Capacity Limits**: Mentors cannot accept more mentees than their capacity
-3. **Goals Require Mentorship**: Learners cannot create goals without an active mentorship
-4. **Request Deduplication**: Cannot send duplicate pending requests to the same mentor
+Mentor profiles display:
+
+| Metric | Description |
+|--------|-------------|
+| Average Rating | Mean of all learner ratings (1-5 stars) |
+| Review Count | Total number of ratings received |
+| Completed Mentorships | Number of successfully completed mentorships |
+| Experience Level | Based on completed count: new, beginner, intermediate, experienced, expert |
+| Trust Score | Weighted score (0-100) combining rating, completion rate, and experience |
+
+**Trust Score Calculation:**
+```
+Trust Score = ratingScore + completionScore + experienceScore
+
+ratingScore = (averageRating / 5) * 50        // 0-50 points
+completionScore = (completionRate / 100) * 30  // 0-30 points
+experienceScore = min(completedMentorships * 2, 20)  // 0-20 points
+```
+
+**Experience Levels:**
+| Completed Mentorships | Level |
+|-----------------------|-------|
+| 0 | New |
+| 1-2 | Beginner |
+| 3-9 | Intermediate |
+| 10-24 | Experienced |
+| 25+ | Expert |
 
 ---
 
-## API Routes Reference
+## How to Navigate the App
 
-### Authentication Routes
+### Learner Navigation
 
-```
-POST /api/auth/register
-Body: { name, email, password, role }
-Response: { success, token, data: { id, name, email, role } }
+| Menu Item | What It Does |
+|-----------|--------------|
+| Dashboard | See your active mentorship, goals, pending requests, and submit check-ins |
+| Find Mentors | Browse all available mentors, view their profiles and ratings |
+| My Goals | View your learning goals and add progress updates |
 
-POST /api/auth/login
-Body: { email, password }
-Response: { success, token, data: { id, name, email, role } }
+### Mentor Navigation
 
-GET /api/auth/me
-Headers: Authorization: Bearer <token>
-Response: { success, data: User }
-```
+| Menu Item | What It Does |
+|-----------|--------------|
+| Dashboard | See incoming requests with learner reliability, manage mentees, rate completed learners |
 
-### Mentor Profile Routes
+### Pages
 
-```
-GET /api/mentor-profiles
-Response: { success, count, data: [MentorProfile] }
-
-GET /api/mentor-profiles/:id
-Response: { success, data: MentorProfile }
-
-GET /api/mentor-profiles/me  (Mentor only)
-Response: { success, data: MentorProfile }
-
-POST /api/mentor-profiles  (Mentor only)
-Body: { skills: [], bio, capacity }
-Response: { success, data: MentorProfile }
-
-PUT /api/mentor-profiles  (Mentor only)
-Body: { skills?, bio?, capacity? }
-Response: { success, data: MentorProfile }
-```
-
-### Mentorship Routes
-
-```
-POST /api/mentorships  (Learner only)
-Body: { mentorId, message? }
-Response: { success, data: MentorshipRequest }
-
-GET /api/mentorships/my-requests  (Learner only)
-Response: { success, count, data: [MentorshipRequest] }
-
-GET /api/mentorships/active  (Learner only)
-Response: { success, data: MentorshipRequest | null }
-
-GET /api/mentorships/requests  (Mentor only)
-Response: { success, count, data: [MentorshipRequest] }
-
-GET /api/mentorships/mentees  (Mentor only)
-Response: { success, count, data: [MentorshipRequest] }
-
-PUT /api/mentorships/:id  (Mentor only)
-Body: { status: 'accepted' | 'rejected' }
-Response: { success, data: MentorshipRequest }
-```
-
-### Goal Routes
-
-```
-POST /api/goals  (Learner only, requires active mentorship)
-Body: { title, description }
-Response: { success, data: Goal }
-
-GET /api/goals  (Learner only)
-Response: { success, count, data: [Goal] }
-
-GET /api/goals/:id
-Response: { success, data: Goal }
-
-PUT /api/goals/:id  (Learner only, own goals)
-Body: { status: 'active' | 'completed' }
-Response: { success, data: Goal }
-
-GET /api/goals/mentee/:menteeId  (Mentor only, own mentees)
-Response: { success, count, data: [Goal] }
-```
-
-### Progress Routes
-
-```
-POST /api/progress/:goalId  (Learner only, own goals)
-Body: { content }
-Response: { success, data: ProgressUpdate }
-
-GET /api/progress/:goalId
-Response: { success, count, data: [ProgressUpdate] }
-```
+- **Login** - Sign in to your account
+- **Register** - Create a new account (choose learner or mentor role)
+- **Mentor Profile** - View a mentor's details, skills, ratings, and send requests
+- **Mentee Goals** - (Mentor view) See and manage a specific mentee's goals
 
 ---
 
-## Setup Instructions
+## Mentorship Status Flow
 
-### Prerequisites
-
-- Node.js (v18 or higher)
-- npm (comes with Node.js)
-- MongoDB Atlas account (free tier works)
-
-### Step 1: Clone or Navigate to the Project
-
-```bash
-cd C:\Users\myPC\Desktop\skillBridge
+```
+pending -> active -> at-risk -> paused -> completed
+              |         |         |
+              |         |         +-> (mentor reactivates) -> active
+              |         |
+              |         +-> (learner submits check-in) -> active
+              |
+              +-> (learner completes) -> completed
 ```
 
-### Step 2: Set Up MongoDB Atlas
+**Status Descriptions:**
+| Status | Meaning |
+|--------|---------|
+| pending | Request sent, waiting for mentor to accept/reject |
+| active | Mentorship is active and in good standing |
+| at-risk | Learner missed 2 consecutive weeks of check-ins |
+| paused | Learner missed 3+ weeks, mentorship frozen until reactivated |
+| completed | Mentorship ended successfully |
+| rejected | Mentor declined the request |
 
-1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) and sign in or create a free account
+---
 
-2. Create a new cluster (free tier M0 is fine)
+## Getting Started
 
-3. Once cluster is created, click **"Connect"**
+### What You Need
+- Node.js (version 18 or higher)
+- A MongoDB database (MongoDB Atlas free tier works)
 
-4. Choose **"Connect your application"**
+### Setup Steps
 
-5. Copy the connection string. It looks like:
+1. **Set up the backend**
    ```
-   mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-   ```
-
-6. **Important**:
-   - Replace `<username>` with your database username
-   - Replace `<password>` with your database password
-   - Add your database name before the `?`: `.../skillbridge?retryWrites=true...`
-
-7. **Allow network access**:
-   - Go to "Network Access" in Atlas sidebar
-   - Click "Add IP Address"
-   - Either add your current IP or click "Allow Access from Anywhere" (0.0.0.0/0) for development
-
-### Step 3: Configure Backend Environment Variables
-
-1. Navigate to the backend folder:
-   ```bash
    cd backend
-   ```
-
-2. Create a `.env` file (copy from the example):
-   ```bash
    copy .env.example .env
    ```
+   Edit `.env` with your MongoDB connection string and a secret key for JWT.
 
-3. Edit the `.env` file with your values:
-   ```env
-   PORT=5000
-   MONGODB_URI=mongodb+srv://yourUsername:yourPassword@cluster0.xxxxx.mongodb.net/skillbridge?retryWrites=true&w=majority
-   JWT_SECRET=your_super_secret_key_make_it_long_and_random
-   JWT_EXPIRE=7d
+2. **Install everything**
+   ```
+   cd backend
+   npm install
+   cd ../frontend
+   npm install
    ```
 
-   **Important**:
-   - Replace the MONGODB_URI with YOUR actual connection string
-   - Change JWT_SECRET to a random string (at least 32 characters)
+3. **Run the app**
 
-### Step 4: Install Dependencies
+   Open two terminals:
 
-Install backend dependencies:
-```bash
-cd backend
-npm install
-```
+   Terminal 1 (Backend):
+   ```
+   cd backend
+   npm run dev
+   ```
 
-Install frontend dependencies:
-```bash
-cd ../frontend
-npm install
-```
+   Terminal 2 (Frontend):
+   ```
+   cd frontend
+   npm run dev
+   ```
 
-### Step 5: Start the Application
-
-**Option A: Run both separately (recommended for development)**
-
-Terminal 1 - Backend:
-```bash
-cd backend
-npm run dev
-```
-
-Terminal 2 - Frontend:
-```bash
-cd frontend
-npm run dev
-```
-
-**Option B: Manual start**
-
-Backend (from `backend` folder):
-```bash
-npm start
-```
-
-Frontend (from `frontend` folder):
-```bash
-npm run dev
-```
-
-### Step 6: Access the Application
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000/api
-- **API Health Check**: http://localhost:5000/api/health
+4. **Open the app**
+   - Go to http://localhost:3000 in your browser
+   - Register a new account and start using SkillBridge
 
 ---
 
-## Testing the Application
+## Quick Test
 
-### Test Flow 1: Register as Mentor and Create Profile
-
-1. Open http://localhost:3000
-2. Click "Register"
-3. Fill in:
-   - Name: "John Mentor"
-   - Email: "mentor@test.com"
-   - Password: "password123"
-   - Role: "Mentor"
-4. After registration, you'll see the Mentor Dashboard
-5. Create your profile:
-   - Skills: "JavaScript, React, Node.js"
-   - Bio: "Senior developer with 5 years experience"
-   - Capacity: 5
-6. Click "Create Profile"
-
-### Test Flow 2: Register as Learner and Request Mentorship
-
-1. Open a new incognito/private browser window
-2. Go to http://localhost:3000
-3. Register as:
-   - Name: "Jane Learner"
-   - Email: "learner@test.com"
-   - Password: "password123"
-   - Role: "Learner"
-4. Click "Find Mentors" in navbar
-5. Click "View Profile" on the mentor you created
-6. Send a mentorship request with a message
-7. Return to Dashboard to see your pending request
-
-### Test Flow 3: Accept Mentorship and Create Goals
-
-1. Go back to mentor's browser window (or login as mentor)
-2. You should see the incoming request
-3. Click "Accept"
-4. Go to learner's browser window
-5. Refresh or click Dashboard
-6. You should now see "Active Mentorship"
-7. Click "My Goals" or "Manage Goals"
-8. Create a new goal:
-   - Title: "Learn React Hooks"
-   - Description: "Master useState, useEffect, useContext, and custom hooks"
-9. Click on the goal to view details
-10. Add a progress update: "Completed useState tutorial"
-
-### Test Flow 4: Mentor Views Mentee Progress
-
-1. Go to mentor's browser window
-2. Click "View Goals" on the mentee card
-3. You can see all the mentee's goals and progress updates
-
-### Testing with API Directly (using curl or Postman)
-
-```bash
-# Health Check
-curl http://localhost:5000/api/health
-
-# Register
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@test.com","password":"password123","role":"learner"}'
-
-# Login (save the token!)
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@test.com","password":"password123"}'
-
-# Get mentors (use token from login)
-curl http://localhost:5000/api/mentor-profiles \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-```
+1. Register as a mentor, create your profile with skills
+2. In a different browser (or incognito), register as a learner
+3. As the learner, find the mentor and send a request
+4. As the mentor, accept the request (you'll see "New learner - no history")
+5. As the mentor, create a goal for the learner
+6. As the learner, submit weekly check-ins and progress updates
+7. As the learner, complete the mentorship and rate the mentor
+8. As the mentor, rate the learner
+9. Send another request - now you'll see the learner's reliability score
 
 ---
 
-## Common Issues & Troubleshooting
+## Automated Features
 
-### "Cannot connect to MongoDB"
-- Check your MONGODB_URI in `.env`
-- Ensure your IP is whitelisted in MongoDB Atlas Network Access
-- Verify your username and password are correct
+**Weekly Inactivity Check (Mondays 9:00 AM UTC)**
+- System checks all active mentorships for missed check-ins
+- Moves inactive mentorships to at-risk or paused status
+- Logs all status changes for mentor visibility
 
-### "CORS errors in browser"
+**Real-time Inactivity Detection**
+- When learner loads their dashboard, system checks for missed weeks
+- Status updates immediately if check-ins are overdue
+
+---
+
+## Troubleshooting
+
+**Can't connect to database?**
+- Check your MongoDB URI in the `.env` file
+- Make sure your IP is allowed in MongoDB Atlas Network Access
+
+**Getting CORS errors?**
 - Make sure both backend (port 5000) and frontend (port 3000) are running
-- The Vite proxy should handle API requests
 
-### "JWT token errors"
-- Ensure JWT_SECRET is set in `.env`
-- Clear localStorage and login again
+**Token errors?**
+- Clear your browser's localStorage and log in again
 
-### "Port already in use"
-- Kill the process using the port or change PORT in `.env`
-- On Windows: `netstat -ano | findstr :5000` then `taskkill /PID <PID> /F`
+**Mentors not loading?**
+- Check browser console for errors
+- Verify backend is running on port 5000
 
----
-
-## License
-
-This project is for educational/MVP purposes.
+**Dashboard not loading data?**
+- Check that you're logged in with the correct role
+- Refresh the page or clear localStorage and log in again
+~

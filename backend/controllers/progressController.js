@@ -1,6 +1,7 @@
 const { ProgressUpdate, Goal, MentorshipRequest } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
+const { resetInactivityOnProgressUpdate } = require('../services/inactivityService');
 
 // @desc    Create progress update for a goal
 // @route   POST /api/progress/:goalId
@@ -26,6 +27,9 @@ const createProgressUpdate = asyncHandler(async (req, res, next) => {
     learner: req.user.id,
     content,
   });
+
+  // Reset inactivity status if mentorship was at-risk
+  await resetInactivityOnProgressUpdate(goal.mentorship);
 
   res.status(201).json({
     success: true,
@@ -55,7 +59,7 @@ const getProgressUpdates = asyncHandler(async (req, res, next) => {
     const mentorship = await MentorshipRequest.findOne({
       mentor: req.user.id,
       learner: goal.learner,
-      status: 'accepted',
+      status: { $in: ['active', 'at-risk', 'paused'] },
     });
 
     if (!mentorship) {

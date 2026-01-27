@@ -58,14 +58,19 @@ export const mentorshipAPI = {
   updateStatus: (id, status) => api.put(`/mentorships/${id}`, { status }),
   getActiveMentorship: () => api.get('/mentorships/active'),
   getMentees: () => api.get('/mentorships/mentees'),
+  completeMentorship: (id) => api.put(`/mentorships/${id}/complete`),
+  reactivateMentorship: (id, reason) => api.put(`/mentorships/${id}/reactivate`, { reason }),
+  getCompletedMentorships: () => api.get('/mentorships/completed'),
 };
 
 // Goals
 export const goalAPI = {
-  create: (data) => api.post('/goals', data),
+  // Mentor creates goal for mentee
+  createForMentee: (data) => api.post('/goals', data),
   getMyGoals: () => api.get('/goals'),
   getMenteeGoals: (menteeId) => api.get(`/goals/mentee/${menteeId}`),
   getOne: (id) => api.get(`/goals/${id}`),
+  // Mentor updates goal status
   updateStatus: (id, status) => api.put(`/goals/${id}`, { status }),
 };
 
@@ -73,6 +78,22 @@ export const goalAPI = {
 export const progressAPI = {
   create: (goalId, content) => api.post(`/progress/${goalId}`, { content }),
   getByGoal: (goalId) => api.get(`/progress/${goalId}`),
+};
+
+// Reviews (Learner → Mentor ratings)
+export const reviewAPI = {
+  submitRating: (mentorshipId, rating) => api.post('/reviews', { mentorshipId, rating }),
+  getMentorRatings: (mentorId) => api.get(`/reviews/mentor/${mentorId}`),
+  getMySubmittedRatings: () => api.get('/reviews/my'),
+  canReview: (mentorshipId) => api.get(`/reviews/can-review/${mentorshipId}`),
+};
+
+// Feedback (Mentor → Learner ratings)
+export const feedbackAPI = {
+  submitRating: (mentorshipId, rating) => api.post('/feedback', { mentorshipId, rating }),
+  getLearnerRatings: (learnerId) => api.get(`/feedback/learner/${learnerId}`),
+  getMySubmittedRatings: () => api.get('/feedback/my'),
+  canSubmit: (mentorshipId) => api.get(`/feedback/can-submit/${mentorshipId}`),
 };
 
 export default api;

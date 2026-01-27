@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, query, param } = require('express-validator');
 const {
   createProfile,
   updateProfile,
@@ -13,9 +13,43 @@ const validate = require('../middleware/validate');
 const router = express.Router();
 
 // Public routes (still need auth to view)
-router.get('/', protect, getAllProfiles);
+// Phase 3: Enhanced with reputation data and sorting
+router.get(
+  '/',
+  protect,
+  [
+    query('sortBy')
+      .optional()
+      .isIn(['rating', 'experience', 'trust', 'reviews', 'newest'])
+      .withMessage('Invalid sort option'),
+    query('onlyAvailable')
+      .optional()
+      .isIn(['true', 'false'])
+      .withMessage('onlyAvailable must be true or false'),
+    query('includeReputation')
+      .optional()
+      .isIn(['true', 'false'])
+      .withMessage('includeReputation must be true or false'),
+  ],
+  validate,
+  getAllProfiles
+);
+
 router.get('/me', protect, authorize('mentor'), getMyProfile);
-router.get('/:id', protect, getProfile);
+
+router.get(
+  '/:id',
+  protect,
+  [
+    param('id').isMongoId().withMessage('Invalid profile ID'),
+    query('includeReputation')
+      .optional()
+      .isIn(['true', 'false'])
+      .withMessage('includeReputation must be true or false'),
+  ],
+  validate,
+  getProfile
+);
 
 // Mentor-only routes
 router.post(

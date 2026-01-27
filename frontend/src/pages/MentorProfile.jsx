@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { mentorProfileAPI, mentorshipAPI } from '../services/api';
+import { mentorProfileAPI, mentorshipAPI, reviewAPI } from '../services/api';
 
 function MentorProfile() {
   const { id } = useParams();
@@ -9,20 +9,44 @@ function MentorProfile() {
   const { user } = useAuth();
 
   const [profile, setProfile] = useState(null);
+  const [mentorRating, setMentorRating] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
+  const [activeMentorship, setActiveMentorship] = useState(null);
+  const [myRequests, setMyRequests] = useState([]);
 
   useEffect(() => {
-    fetchProfile();
-  }, [id]);
+    fetchData();
+  }, [id, user]);
 
-  const fetchProfile = async () => {
+  const fetchData = async () => {
     try {
-      const response = await mentorProfileAPI.getOne(id);
-      setProfile(response.data.data);
+      const profileRes = await mentorProfileAPI.getOne(id);
+      // Handle both old format (direct profile) and new format (profile wrapper with reputation)
+      const profileData = profileRes.data.data.profile || profileRes.data.data;
+      setProfile(profileData);
+
+      // Fetch mentor rating
+      try {
+        const ratingRes = await reviewAPI.getMentorRatings(profileData.user._id);
+        setMentorRating(ratingRes.data.stats);
+      } catch (err) {
+        // No ratings yet, that's fine
+        setMentorRating(null);
+      }
+
+      // If user is a learner, also fetch their active mentorship and requests
+      if (user?.role === 'learner') {
+        const [activeRes, requestsRes] = await Promise.all([
+          mentorshipAPI.getActiveMentorship(),
+          mentorshipAPI.getMyRequests(),
+        ]);
+        setActiveMentorship(activeRes.data.data);
+        setMyRequests(requestsRes.data.data);
+      }
     } catch (err) {
       setError('Failed to load mentor profile');
     } finally {
@@ -50,6 +74,20 @@ function MentorProfile() {
     }
   };
 
+  const renderStars = (rating) => {
+    const fullStars = Math.floor(rating);
+    const hasHalfStar = rating % 1 >= 0.5;
+    const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+
+    return (
+      <span style={{ color: '#ffc107', fontSize: '1.2em' }}>
+        {'★'.repeat(fullStars)}
+        {hasHalfStar && '½'}
+        {'☆'.repeat(emptyStars)}
+      </span>
+    );
+  };
+
   if (loading) return <div>Loading...</div>;
   if (!profile) return <div className="error">Mentor not found</div>;
 
@@ -66,6 +104,21 @@ function MentorProfile() {
       <div className="card">
         <h2>{profile.user.name}</h2>
         <p>{profile.user.email}</p>
+
+        {/* Rating Display */}
+        {mentorRating && (
+          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {renderStars(mentorRating.averageRating)}
+              <span style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+                {mentorRating.averageRating.toFixed(1)}
+              </span>
+              <span style={{ color: '#6c757d' }}>
+                ({mentorRating.totalRatings} {mentorRating.totalRatings === 1 ? 'rating' : 'ratings'})
+              </span>
+            </div>
+          </div>
+        )}
 
         <h4 style={{ marginTop: '20px' }}>Skills</h4>
         <div className="skills-list">
@@ -92,30 +145,62 @@ function MentorProfile() {
       </div>
 
       {/* Request Form - Only for learners */}
-      {user?.role === 'learner' && profile.isAvailable && (
+      {user?.role === 'learner' && (
         <div className="card" style={{ marginTop: '20px' }}>
-          <h3>Send Mentorship Request</h3>
-          {error && <div className="error">{error}</div>}
-          {success && <div className="success">{success}</div>}
-          <form onSubmit={handleSendRequest}>
-            <div className="form-group">
-              <label>Message (optional)</label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={3}
-                maxLength={300}
-                placeholder="Introduce yourself and explain why you'd like this mentor..."
-              />
-            </div>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={submitting}
-            >
-              {submitting ? 'Sending...' : 'Send Request'}
-            </button>
-          </form>
+          {activeMentorship ? (
+            // Learner already has an active mentorship
+            <>
+              <h3>Mentorship Status</h3>
+              <p style={{ color: '#856404' }}>
+                You already have an active mentorship with {activeMentorship.mentor.name}.
+                Complete your current mentorship before requesting a new one.
+              </p>
+            </>
+          ) : myRequests.some(
+              (r) => r.mentor._id === profile.user._id && r.status === 'pending'
+            ) ? (
+            // Learner has a pending request to this mentor
+            <>
+              <h3>Request Pending</h3>
+              <p style={{ color: '#856404' }}>
+                You already have a pending request to this mentor.
+              </p>
+            </>
+          ) : !profile.isAvailable ? (
+            // Mentor is not available
+            <>
+              <h3>Mentor Unavailable</h3>
+              <p style={{ color: '#dc3545' }}>
+                This mentor is currently at full capacity.
+              </p>
+            </>
+          ) : (
+            // Can send a request
+            <>
+              <h3>Send Mentorship Request</h3>
+              {error && <div className="error">{error}</div>}
+              {success && <div className="success">{success}</div>}
+              <form onSubmit={handleSendRequest}>
+                <div className="form-group">
+                  <label>Message (optional)</label>
+                  <textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                    maxLength={300}
+                    placeholder="Introduce yourself and explain why you'd like this mentor..."
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting}
+                >
+                  {submitting ? 'Sending...' : 'Send Request'}
+                </button>
+              </form>
+            </>
+          )}
         </div>
       )}
     </div>

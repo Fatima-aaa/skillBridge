@@ -4,12 +4,16 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
+const { initializeScheduler, stopScheduler } = require('./services/scheduler');
 
 // Load env vars
 dotenv.config();
 
 // Connect to database
-connectDB();
+connectDB().then(() => {
+  // Initialize scheduler after DB connection is established
+  initializeScheduler();
+});
 
 const app = express();
 
@@ -42,5 +46,16 @@ const server = app.listen(PORT, () => {
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
   console.error(`Unhandled Rejection: ${err.message}`);
+  stopScheduler();
   server.close(() => process.exit(1));
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Shutting down gracefully...');
+  stopScheduler();
+  server.close(() => {
+    console.log('Server closed.');
+    process.exit(0);
+  });
 });

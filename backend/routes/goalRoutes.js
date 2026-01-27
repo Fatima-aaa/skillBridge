@@ -13,11 +13,19 @@ const validate = require('../middleware/validate');
 const router = express.Router();
 
 // Learner routes
+router.get('/', protect, authorize('learner'), getMyGoals);
+
+// Mentor routes - Create goal for mentee
 router.post(
   '/',
   protect,
-  authorize('learner'),
+  authorize('mentor'),
   [
+    body('menteeId')
+      .notEmpty()
+      .withMessage('Mentee ID is required')
+      .isMongoId()
+      .withMessage('Invalid mentee ID'),
     body('title')
       .trim()
       .notEmpty()
@@ -35,12 +43,11 @@ router.post(
   createGoal
 );
 
-router.get('/', protect, authorize('learner'), getMyGoals);
-
+// Mentor route - Update goal status (mark as completed)
 router.put(
   '/:id',
   protect,
-  authorize('learner'),
+  authorize('mentor'),
   [
     param('id').isMongoId().withMessage('Invalid goal ID'),
     body('status')

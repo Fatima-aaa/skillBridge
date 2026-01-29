@@ -6,7 +6,7 @@ const {
   getMySubmittedReviews,
   canReviewMentorship,
 } = require('../controllers/reviewController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, checkSuspended } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
@@ -18,6 +18,7 @@ router.post(
   '/',
   protect,
   authorize('learner'),
+  checkSuspended,
   [
     body('mentorshipId')
       .notEmpty()

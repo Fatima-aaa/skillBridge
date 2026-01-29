@@ -8,6 +8,8 @@ const MentorshipStatusLog = require('./MentorshipStatusLog');
 // Phase 3: Trust, Feedback & Reputation
 const MentorReview = require('./MentorReview');
 const LearnerFeedback = require('./LearnerFeedback');
+// Phase 4: Admin & Moderation
+const AdminAuditLog = require('./AdminAuditLog');
 
 module.exports = {
   User,
@@ -20,4 +22,6 @@ module.exports = {
   // Phase 3
   MentorReview,
   LearnerFeedback,
+  // Phase 4
+  AdminAuditLog,
 };

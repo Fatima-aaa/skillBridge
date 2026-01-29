@@ -282,4 +282,83 @@ pending -> active -> at-risk -> paused -> completed
 **Dashboard not loading data?**
 - Check that you're logged in with the correct role
 - Refresh the page or clear localStorage and log in again
+
+---
+
+## Admin Panel (New)
+
+SkillBridge includes a separate admin panel for platform management and moderation.
+
+### Admin Authentication
+
+- Admins have a separate login endpoint (`/api/admin/auth/login`)
+- Only users with the `admin` role can authenticate
+- All admin logins are logged for security
+
+### User Moderation
+
+**View Users**
+- Browse all learners and mentors with pagination
+- Filter by role (learner/mentor) or status (active/suspended)
+- Search users by name or email
+- View detailed user activity summaries
+
+**Suspend/Reinstate Users**
+- Suspend users who violate platform rules (requires reason)
+- Reinstate suspended users (requires reason)
+- All suspension/reinstatement actions are logged
+
+### Mentorship Dispute Resolution
+
+**View Mentorships**
+- Browse all mentorships with status filtering
+- View complete mentorship details including:
+  - Goals and progress updates
+  - Weekly check-ins
+  - Reviews and feedback
+  - Status change history
+
+**Admin Actions**
+- Pause active/at-risk mentorships (dispute resolution)
+- Mark mentorships as completed (dispute resolution)
+- All actions require a reason and are logged
+
+### Platform Monitoring
+
+**Statistics Dashboard**
+- Total users (learners, mentors, active, suspended)
+- Mentorship counts by status (pending, active, at-risk, paused, completed, rejected)
+
+### Audit Logging
+
+All admin actions are immutably logged with:
+- Admin who performed the action
+- Action type and target
+- Reason provided
+- IP address and user agent
+- Timestamp
+
+**Queryable Logs**
+- Filter by admin, action type, target type, date range
+- View recent activity summary (last 24 hours)
+- Track audit history for specific users or mentorships
+
+### Admin API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/auth/login` | POST | Admin login |
+| `/api/admin/auth/me` | GET | Get admin profile |
+| `/api/admin/users` | GET | List all users |
+| `/api/admin/users/:id` | GET | Get user details |
+| `/api/admin/users/:id/activity` | GET | Get user activity summary |
+| `/api/admin/users/:id/suspend` | PUT | Suspend a user |
+| `/api/admin/users/:id/reinstate` | PUT | Reinstate a user |
+| `/api/admin/mentorships` | GET | List all mentorships |
+| `/api/admin/mentorships/:id` | GET | Get mentorship details |
+| `/api/admin/mentorships/:id/pause` | PUT | Pause a mentorship |
+| `/api/admin/mentorships/:id/complete` | PUT | Complete a mentorship |
+| `/api/admin/platform/stats` | GET | Get platform statistics |
+| `/api/admin/audit-logs` | GET | Query audit logs |
+| `/api/admin/audit-logs/recent` | GET | Get recent activity |
 ~

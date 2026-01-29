@@ -15,7 +15,7 @@ const {
   completeMentorship,
   getCompletedMentorships,
 } = require('../controllers/mentorshipController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, checkSuspended } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
@@ -25,6 +25,7 @@ router.post(
   '/',
   protect,
   authorize('learner'),
+  checkSuspended,
   [
     body('mentorId')
       .notEmpty()
@@ -51,6 +52,7 @@ router.put(
   '/:id',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid request ID'),
     body('status')
@@ -98,6 +100,7 @@ router.put(
   '/:id/pause',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid mentorship ID'),
     body('reason')
@@ -115,6 +118,7 @@ router.put(
   '/:id/reactivate',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid mentorship ID'),
     body('reason')
@@ -131,6 +135,7 @@ router.put(
   '/:id/flag',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid mentorship ID'),
     body('reason')
@@ -158,6 +163,7 @@ router.put(
   '/:id/complete',
   protect,
   authorize('learner'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid mentorship ID'),
   ],

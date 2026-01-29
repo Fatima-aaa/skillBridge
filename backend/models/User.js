@@ -28,8 +28,27 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['learner', 'mentor'],
+      enum: ['learner', 'mentor', 'admin'],
       required: [true, 'Role is required'],
+    },
+    status: {
+      type: String,
+      enum: ['active', 'suspended'],
+      default: 'active',
+    },
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
+    suspendedReason: {
+      type: String,
+      maxlength: [500, 'Suspension reason cannot exceed 500 characters'],
+      default: null,
+    },
+    suspendedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
     },
   },
   {

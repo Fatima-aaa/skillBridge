@@ -7,7 +7,7 @@ const {
   getGoal,
   updateGoal,
 } = require('../controllers/goalController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, checkSuspended } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
@@ -20,6 +20,7 @@ router.post(
   '/',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     body('menteeId')
       .notEmpty()
@@ -48,6 +49,7 @@ router.put(
   '/:id',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     param('id').isMongoId().withMessage('Invalid goal ID'),
     body('status')

@@ -47,4 +47,21 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+/**
+ * Middleware to check if a user is suspended
+ * Suspended users can view data but cannot create new data
+ * Apply this to POST/PUT routes where data is created
+ */
+const checkSuspended = (req, res, next) => {
+  if (req.user && req.user.status === 'suspended') {
+    return next(
+      new AppError(
+        'Your account has been suspended. You cannot perform this action.',
+        403
+      )
+    );
+  }
+  next();
+};
+
+module.exports = { protect, authorize, checkSuspended };

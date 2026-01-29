@@ -7,7 +7,7 @@ const {
   getAllProfiles,
   getProfile,
 } = require('../controllers/mentorProfileController');
-const { protect, authorize } = require('../middleware/auth');
+const { protect, authorize, checkSuspended } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 const router = express.Router();
@@ -56,6 +56,7 @@ router.post(
   '/',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     body('skills')
       .isArray({ min: 1 })
@@ -82,6 +83,7 @@ router.put(
   '/',
   protect,
   authorize('mentor'),
+  checkSuspended,
   [
     body('skills')
       .optional()

@@ -2,534 +2,222 @@
 
 SkillBridge is a MERN stack application that connects learners with mentors and helps learners stay accountable through goals and progress tracking.
 
-## Table of Contents
+## User Roles & Capabilities
 
-1. [Architecture Overview](#architecture-overview)
-2. [Data Models & Relationships](#data-models--relationships)
-3. [Authorization Logic](#authorization-logic)
-4. [API Routes Reference](#api-routes-reference)
-5. [Setup Instructions](#setup-instructions)
-6. [Testing the Application](#testing-the-application)
+### Learner
 
----
+| Capability | Description |
+|------------|-------------|
+| Browse Mentors | Search and filter available mentors by skills, rating, and availability |
+| View Mentor Profiles | See mentor bio, skills, experience level, trust score, and reviews |
+| Request Mentorship | Send personalized mentorship requests to available mentors |
+| Track Goals | View learning goals assigned by mentor with status tracking |
+| Submit Progress Updates | Document progress on goals with detailed updates |
+| Weekly Check-ins | Submit weekly accountability check-ins (planned, completed, blockers) |
+| Complete Mentorship | Mark mentorship as complete when goals are achieved |
+| Rate Mentor | Provide anonymous 1-5 star rating after mentorship completion |
 
-## Architecture Overview
+### Mentor
 
-### Tech Stack
-- **Backend**: Node.js, Express.js, MongoDB (Mongoose)
-- **Frontend**: React (Vite), React Router, Axios
-- **Authentication**: JWT (JSON Web Tokens)
+| Capability | Description |
+|------------|-------------|
+| Create Profile | Set up profile with skills, bio, and mentee capacity |
+| Review Requests | Accept or reject incoming mentorship requests |
+| View Learner Reliability | See learner's reliability score and history before accepting |
+| Create Goals | Define learning goals for mentees |
+| Track Progress | Monitor mentee progress updates and check-in submissions |
+| Manage Mentees | View all active mentees and their status (active, at-risk, paused) |
+| Reactivate Mentorships | Resume paused mentorships for inactive learners |
+| Rate Learner | Provide anonymous 1-5 star rating after mentorship completion |
 
-### Project Structure
+### Admin
 
-```
-skillBridge/
-├── backend/
-│   ├── config/
-│   │   └── db.js              # MongoDB connection
-│   ├── controllers/
-│   │   ├── authController.js       # Auth logic
-│   │   ├── mentorProfileController.js
-│   │   ├── mentorshipController.js
-│   │   ├── goalController.js
-│   │   └── progressController.js
-│   ├── middleware/
-│   │   ├── auth.js            # JWT verification & role authorization
-│   │   ├── errorHandler.js    # Centralized error handling
-│   │   └── validate.js        # Input validation middleware
-│   ├── models/
-│   │   ├── User.js
-│   │   ├── MentorProfile.js
-│   │   ├── MentorshipRequest.js
-│   │   ├── Goal.js
-│   │   └── ProgressUpdate.js
-│   ├── routes/
-│   │   ├── authRoutes.js
-│   │   ├── mentorProfileRoutes.js
-│   │   ├── mentorshipRoutes.js
-│   │   ├── goalRoutes.js
-│   │   └── progressRoutes.js
-│   ├── utils/
-│   │   ├── AppError.js        # Custom error class
-│   │   └── asyncHandler.js    # Async/await error wrapper
-│   └── server.js              # Express app entry point
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── context/
-│   │   ├── pages/
-│   │   └── services/
-│   └── ...
-└── README.md
-```
+| Capability | Description |
+|------------|-------------|
+| View Dashboard | Platform-wide statistics (users, mentorships, activity) |
+| Manage Users | Search, filter, view activity, suspend, and reinstate users |
+| Manage Mentorships | View details, pause for disputes, force-complete mentorships |
+| Audit Logs | View immutable logs of all admin actions with filters |
+| Monitor Health | Track at-risk mentorships and suspended users |
 
 ---
 
-## Data Models & Relationships
+## Key Functionalities
 
-### 1. User Model
-The base authentication model for all users.
+### 1. Mentorship Lifecycle Management
+- Request → Accept/Reject → Active → At-Risk → Paused → Completed
+- Automatic status transitions based on learner activity
+- Manual intervention options for both mentors and admins
 
-```javascript
-{
-  name: String,           // Required, max 50 chars
-  email: String,          // Required, unique, validated
-  password: String,       // Required, min 6 chars, hashed with bcrypt
-  role: 'learner' | 'mentor',  // Required
-  timestamps: true
-}
-```
+### 2. Accountability System
+- Weekly check-in submissions with structured format
+- Automatic inactivity detection (2 weeks = at-risk, 3 weeks = paused)
+- Scheduled Monday morning checks via cron job
+- Real-time status updates on dashboard load
 
-**Key Features:**
-- Password is automatically hashed before saving using bcrypt
-- Includes method to compare passwords and generate JWT tokens
-- Password field excluded from queries by default (`select: false`)
+### 3. Reputation & Trust System
+- **Learner Reliability Score (0-100)**: Based on mentor feedback, check-in consistency, and completion history
+- **Mentor Trust Score (0-100)**: Based on ratings, completion rate, and experience
+- Risk level indicators (Low/Medium/High) with warning messages
+- Anonymous bidirectional ratings after mentorship completion
 
-### 2. MentorProfile Model
-Extended profile information for mentors.
+### 4. Goal & Progress Tracking
+- Mentors create structured goals for learners
+- Learners submit progress updates with descriptions
+- Status tracking (active, completed) for each goal
+- Historical progress timeline view
 
-```javascript
-{
-  user: ObjectId,         // References User, unique (1:1 relationship)
-  skills: [String],       // Required, at least one skill
-  bio: String,            // Optional, max 500 chars
-  capacity: Number,       // Required, 1-20 mentees max
-  currentMenteeCount: Number,  // Auto-tracked
-  timestamps: true
-}
-```
-
-**Key Features:**
-- One-to-one relationship with User (mentor)
-- Virtual `isAvailable` property computed from capacity vs currentMenteeCount
-- Skills are indexed for efficient filtering
-
-### 3. MentorshipRequest Model
-Tracks mentorship connections between learners and mentors.
-
-```javascript
-{
-  learner: ObjectId,      // References User (learner)
-  mentor: ObjectId,       // References User (mentor)
-  status: 'pending' | 'accepted' | 'rejected',
-  message: String,        // Optional request message, max 300 chars
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Compound index prevents duplicate pending requests
-- Status transitions: pending → accepted/rejected (one-way)
-- A learner can only have ONE active (accepted) mentorship
-
-### 4. Goal Model
-Learning goals created by learners within their mentorship.
-
-```javascript
-{
-  mentorship: ObjectId,   // References MentorshipRequest
-  learner: ObjectId,      // References User (learner) - denormalized for queries
-  title: String,          // Required, max 100 chars
-  description: String,    // Required, max 500 chars
-  status: 'active' | 'completed',
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Goals belong to a specific mentorship relationship
-- Learner reference is denormalized for efficient queries
-- Only learners with active mentorships can create goals
-
-### 5. ProgressUpdate Model
-Progress reports for goals.
-
-```javascript
-{
-  goal: ObjectId,         // References Goal
-  learner: ObjectId,      // References User (learner)
-  content: String,        // Required, max 1000 chars
-  timestamps: true
-}
-```
-
-**Key Features:**
-- Multiple updates per goal (append-only log)
-- Indexed by goal and creation time for efficient retrieval
-
-### Entity Relationship Diagram
-
-```
-User (1) ─────────────── (0..1) MentorProfile
-  │                              (mentor only)
-  │
-  ├── as Learner ───────── (*) MentorshipRequest
-  │                              │
-  ├── as Mentor ────────── (*) MentorshipRequest
-  │                              │
-  │                              └── (1) ─── (*) Goal
-  │                                           │
-  │                                           └── (*) ProgressUpdate
-  └── (denormalized refs in Goal, ProgressUpdate)
-```
+### 5. Admin Platform Management
+- User moderation with suspension/reinstatement
+- Dispute resolution for mentorships
+- Complete audit trail of all admin actions
+- Platform health monitoring dashboard
 
 ---
 
-## Authorization Logic
+## Key Features
 
-### Role-Based Access Control (RBAC)
+### User Experience
+- Clean, minimal UI design (Linear/Notion inspired)
+- Role-based dashboards with contextual navigation
+- Real-time status indicators and alerts
+- Responsive card-based layouts
 
-The application implements two-level authorization:
+### Security & Validation
+- JWT-based authentication with role separation
+- Input validation on all endpoints (express-validator)
+- Rate limiting for API protection
+- Separate admin authentication flow
+- Immutable audit logging
 
-1. **Authentication** (`protect` middleware): Verifies JWT token
-2. **Authorization** (`authorize` middleware): Checks user role
+### Performance
+- Database indexes for optimized queries
+- Pagination on all list endpoints
+- Configurable limits and defaults
+- Environment-based configuration
 
-### Route Protection Matrix
-
-| Route | Learner | Mentor | Notes |
-|-------|---------|--------|-------|
-| `POST /api/auth/register` | Yes | Yes | Public |
-| `POST /api/auth/login` | Yes | Yes | Public |
-| `GET /api/auth/me` | Yes | Yes | Authenticated |
-| `GET /api/mentor-profiles` | Yes | Yes | View all mentors |
-| `POST /api/mentor-profiles` | No | Yes | Create own profile |
-| `PUT /api/mentor-profiles` | No | Yes | Update own profile |
-| `POST /api/mentorships` | Yes | No | Send request |
-| `GET /api/mentorships/requests` | No | Yes | View incoming |
-| `PUT /api/mentorships/:id` | No | Yes | Accept/reject |
-| `POST /api/goals` | Yes | No | Must have active mentorship |
-| `GET /api/goals/mentee/:id` | No | Yes | Only own mentees |
-| `POST /api/progress/:goalId` | Yes | No | Own goals only |
-| `GET /api/progress/:goalId` | Yes | Yes | With ownership check |
-
-### Ownership Checks
-
-Beyond role-based access, the application enforces ownership:
-
-1. **Learners can only:**
-   - Create goals for their own active mentorship
-   - Update their own goals
-   - Submit progress for their own goals
-   - View their own requests and goals
-
-2. **Mentors can only:**
-   - Update their own profile
-   - Accept/reject requests sent to them
-   - View goals of their accepted mentees
-
-### Business Rules Enforced
-
-1. **Single Active Mentorship**: A learner can have only one accepted mentorship at a time
-2. **Capacity Limits**: Mentors cannot accept more mentees than their capacity
-3. **Goals Require Mentorship**: Learners cannot create goals without an active mentorship
-4. **Request Deduplication**: Cannot send duplicate pending requests to the same mentor
+### Automation
+- Scheduled inactivity checks (configurable cron)
+- Automatic mentorship status transitions
+- Real-time reliability score calculation
+- Dynamic trust score computation
 
 ---
 
-## API Routes Reference
+## Technical Highlights
 
-### Authentication Routes
+### Architecture
+- **Frontend**: React 18 + Vite, React Router, Context API
+- **Backend**: Node.js, Express.js, MongoDB with Mongoose
+- **Authentication**: JWT tokens with role-based access control
+- **Scheduling**: node-cron for automated tasks
 
-```
-POST /api/auth/register
-Body: { name, email, password, role }
-Response: { success, token, data: { id, name, email, role } }
+### Database Design
+- Compound indexes for complex query optimization
+- Text indexes for full-text search
+- Referential integrity with Mongoose populate
+- Audit log collection for compliance
 
-POST /api/auth/login
-Body: { email, password }
-Response: { success, token, data: { id, name, email, role } }
-
-GET /api/auth/me
-Headers: Authorization: Bearer <token>
-Response: { success, data: User }
-```
-
-### Mentor Profile Routes
-
-```
-GET /api/mentor-profiles
-Response: { success, count, data: [MentorProfile] }
-
-GET /api/mentor-profiles/:id
-Response: { success, data: MentorProfile }
-
-GET /api/mentor-profiles/me  (Mentor only)
-Response: { success, data: MentorProfile }
-
-POST /api/mentor-profiles  (Mentor only)
-Body: { skills: [], bio, capacity }
-Response: { success, data: MentorProfile }
-
-PUT /api/mentor-profiles  (Mentor only)
-Body: { skills?, bio?, capacity? }
-Response: { success, data: MentorProfile }
-```
-
-### Mentorship Routes
-
-```
-POST /api/mentorships  (Learner only)
-Body: { mentorId, message? }
-Response: { success, data: MentorshipRequest }
-
-GET /api/mentorships/my-requests  (Learner only)
-Response: { success, count, data: [MentorshipRequest] }
-
-GET /api/mentorships/active  (Learner only)
-Response: { success, data: MentorshipRequest | null }
-
-GET /api/mentorships/requests  (Mentor only)
-Response: { success, count, data: [MentorshipRequest] }
-
-GET /api/mentorships/mentees  (Mentor only)
-Response: { success, count, data: [MentorshipRequest] }
-
-PUT /api/mentorships/:id  (Mentor only)
-Body: { status: 'accepted' | 'rejected' }
-Response: { success, data: MentorshipRequest }
-```
-
-### Goal Routes
-
-```
-POST /api/goals  (Learner only, requires active mentorship)
-Body: { title, description }
-Response: { success, data: Goal }
-
-GET /api/goals  (Learner only)
-Response: { success, count, data: [Goal] }
-
-GET /api/goals/:id
-Response: { success, data: Goal }
-
-PUT /api/goals/:id  (Learner only, own goals)
-Body: { status: 'active' | 'completed' }
-Response: { success, data: Goal }
-
-GET /api/goals/mentee/:menteeId  (Mentor only, own mentees)
-Response: { success, count, data: [Goal] }
-```
-
-### Progress Routes
-
-```
-POST /api/progress/:goalId  (Learner only, own goals)
-Body: { content }
-Response: { success, data: ProgressUpdate }
-
-GET /api/progress/:goalId
-Response: { success, count, data: [ProgressUpdate] }
-```
+### API Design
+- RESTful endpoints with consistent response format
+- Pagination metadata in all list responses
+- Validation error details for debugging
+- Health check endpoint for monitoring
 
 ---
 
-## Setup Instructions
+## Feature Summary Table
 
-### Prerequisites
-
-- Node.js (v18 or higher)
-- npm (comes with Node.js)
-- MongoDB Atlas account (free tier works)
-
-### Step 1: Clone or Navigate to the Project
-
-```bash
-cd C:\Users\myPC\Desktop\skillBridge
-```
-
-### Step 2: Set Up MongoDB Atlas
-
-1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) and sign in or create a free account
-
-2. Create a new cluster (free tier M0 is fine)
-
-3. Once cluster is created, click **"Connect"**
-
-4. Choose **"Connect your application"**
-
-5. Copy the connection string. It looks like:
-   ```
-   mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-   ```
-
-6. **Important**:
-   - Replace `<username>` with your database username
-   - Replace `<password>` with your database password
-   - Add your database name before the `?`: `.../skillbridge?retryWrites=true...`
-
-7. **Allow network access**:
-   - Go to "Network Access" in Atlas sidebar
-   - Click "Add IP Address"
-   - Either add your current IP or click "Allow Access from Anywhere" (0.0.0.0/0) for development
-
-### Step 3: Configure Backend Environment Variables
-
-1. Navigate to the backend folder:
-   ```bash
-   cd backend
-   ```
-
-2. Create a `.env` file (copy from the example):
-   ```bash
-   copy .env.example .env
-   ```
-
-3. Edit the `.env` file with your values:
-   ```env
-   PORT=5000
-   MONGODB_URI=mongodb+srv://yourUsername:yourPassword@cluster0.xxxxx.mongodb.net/skillbridge?retryWrites=true&w=majority
-   JWT_SECRET=your_super_secret_key_make_it_long_and_random
-   JWT_EXPIRE=7d
-   ```
-
-   **Important**:
-   - Replace the MONGODB_URI with YOUR actual connection string
-   - Change JWT_SECRET to a random string (at least 32 characters)
-
-### Step 4: Install Dependencies
-
-Install backend dependencies:
-```bash
-cd backend
-npm install
-```
-
-Install frontend dependencies:
-```bash
-cd ../frontend
-npm install
-```
-
-### Step 5: Start the Application
-
-**Option A: Run both separately (recommended for development)**
-
-Terminal 1 - Backend:
-```bash
-cd backend
-npm run dev
-```
-
-Terminal 2 - Frontend:
-```bash
-cd frontend
-npm run dev
-```
-
-**Option B: Manual start**
-
-Backend (from `backend` folder):
-```bash
-npm start
-```
-
-Frontend (from `frontend` folder):
-```bash
-npm run dev
-```
-
-### Step 6: Access the Application
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000/api
-- **API Health Check**: http://localhost:5000/api/health
+| Feature | Learner | Mentor | Admin |
+|---------|:-------:|:------:|:-----:|
+| View Dashboard | ✓ | ✓ | ✓ |
+| Browse/Search Mentors | ✓ | - | - |
+| Send Mentorship Request | ✓ | - | - |
+| Accept/Reject Requests | - | ✓ | - |
+| Create Goals | - | ✓ | - |
+| Submit Progress Updates | ✓ | - | - |
+| Submit Weekly Check-ins | ✓ | - | - |
+| View Progress/Check-ins | ✓ | ✓ | ✓ |
+| Complete Mentorship | ✓ | - | ✓ |
+| Pause Mentorship | - | - | ✓ |
+| Rate After Completion | ✓ | ✓ | - |
+| View Reliability Scores | - | ✓ | ✓ |
+| Suspend/Reinstate Users | - | - | ✓ |
+| View Audit Logs | - | - | ✓ |
 
 ---
 
-## Testing the Application
+## Scoring Systems Summary
 
-### Test Flow 1: Register as Mentor and Create Profile
+### Learner Reliability Score (0-100)
+| Component | Max Points | Calculation |
+|-----------|------------|-------------|
+| Mentor Feedback | 40 | (avgRating / 5) × 40 |
+| Check-in Consistency | 30 | (weeksWithCheckIns / totalWeeks) × 30 |
+| Completion History | 20 | (completionRate / 100) × 20 |
+| Stick-with-it Bonus | 10 | ((100 - earlyTerminationRate) / 100) × 10 |
 
-1. Open http://localhost:3000
-2. Click "Register"
-3. Fill in:
-   - Name: "John Mentor"
-   - Email: "mentor@test.com"
-   - Password: "password123"
-   - Role: "Mentor"
-4. After registration, you'll see the Mentor Dashboard
-5. Create your profile:
-   - Skills: "JavaScript, React, Node.js"
-   - Bio: "Senior developer with 5 years experience"
-   - Capacity: 5
-6. Click "Create Profile"
-
-### Test Flow 2: Register as Learner and Request Mentorship
-
-1. Open a new incognito/private browser window
-2. Go to http://localhost:3000
-3. Register as:
-   - Name: "Jane Learner"
-   - Email: "learner@test.com"
-   - Password: "password123"
-   - Role: "Learner"
-4. Click "Find Mentors" in navbar
-5. Click "View Profile" on the mentor you created
-6. Send a mentorship request with a message
-7. Return to Dashboard to see your pending request
-
-### Test Flow 3: Accept Mentorship and Create Goals
-
-1. Go back to mentor's browser window (or login as mentor)
-2. You should see the incoming request
-3. Click "Accept"
-4. Go to learner's browser window
-5. Refresh or click Dashboard
-6. You should now see "Active Mentorship"
-7. Click "My Goals" or "Manage Goals"
-8. Create a new goal:
-   - Title: "Learn React Hooks"
-   - Description: "Master useState, useEffect, useContext, and custom hooks"
-9. Click on the goal to view details
-10. Add a progress update: "Completed useState tutorial"
-
-### Test Flow 4: Mentor Views Mentee Progress
-
-1. Go to mentor's browser window
-2. Click "View Goals" on the mentee card
-3. You can see all the mentee's goals and progress updates
-
-### Testing with API Directly (using curl or Postman)
-
-```bash
-# Health Check
-curl http://localhost:5000/api/health
-
-# Register
-curl -X POST http://localhost:5000/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test User","email":"test@test.com","password":"password123","role":"learner"}'
-
-# Login (save the token!)
-curl -X POST http://localhost:5000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@test.com","password":"password123"}'
-
-# Get mentors (use token from login)
-curl http://localhost:5000/api/mentor-profiles \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-```
+### Mentor Trust Score (0-100)
+| Component | Max Points | Calculation |
+|-----------|------------|-------------|
+| Rating Score | 50 | (avgRating / 5) × 50 |
+| Completion Rate | 30 | (completionRate / 100) × 30 |
+| Experience | 20 | min(completedMentorships × 2, 20) |
 
 ---
 
-## Common Issues & Troubleshooting
+## Mentorship Status Flow
 
-### "Cannot connect to MongoDB"
-- Check your MONGODB_URI in `.env`
-- Ensure your IP is whitelisted in MongoDB Atlas Network Access
-- Verify your username and password are correct
+```
+┌─────────┐     ┌────────┐     ┌─────────┐     ┌────────┐
+│ PENDING │────▶│ ACTIVE │────▶│ AT-RISK │────▶│ PAUSED │
+└─────────┘     └────────┘     └─────────┘     └────────┘
+                    │              │                │
+                    │              │                │
+                    ▼              ▼                ▼
+               ┌───────────┐  (check-in)      (reactivate)
+               │ COMPLETED │◀──────────────────────┘
+               └───────────┘
+```
 
-### "CORS errors in browser"
-- Make sure both backend (port 5000) and frontend (port 3000) are running
-- The Vite proxy should handle API requests
+| Status | Trigger |
+|--------|---------|
+| Pending | Learner sends request |
+| Active | Mentor accepts request |
+| At-Risk | 2 consecutive missed check-in weeks |
+| Paused | 3+ consecutive missed check-in weeks |
+| Completed | Learner or Admin marks complete |
+| Rejected | Mentor declines request |
 
-### "JWT token errors"
-- Ensure JWT_SECRET is set in `.env`
-- Clear localStorage and login again
+---
 
-### "Port already in use"
-- Kill the process using the port or change PORT in `.env`
-- On Windows: `netstat -ano | findstr :5000` then `taskkill /PID <PID> /F`
+## Documentation Highlights
+
+### What Makes SkillBridge Unique
+1. **Bidirectional Accountability**: Both learners and mentors are rated, creating a balanced ecosystem
+2. **Automatic Inactivity Handling**: System manages engagement without manual intervention
+3. **Transparent Reputation**: Reliability scores help mentors make informed decisions
+4. **Admin Oversight**: Full moderation capabilities with audit trail
+5. **Production-Ready**: Environment configs, validation, indexing, and pagination included
+
+### Technical Achievements
+- Complete MERN stack implementation
+- Role-based access control (RBAC)
+- Automated scheduling system
+- Comprehensive input validation
+- Database optimization with indexes
+- Immutable audit logging
+- Environment-based configuration
+- RESTful API with pagination
+
+### UI/UX Design Principles
+- Ultra-minimal aesthetic (Linear/Notion inspired)
+- Calm blue accent color for trust and professionalism
+- 8px spacing system for consistency
+- Inter font for modern readability
+- Subtle shadows and transitions
+- Clear visual hierarchy with typography
+- Status badges with semantic colors
 
 ---
 

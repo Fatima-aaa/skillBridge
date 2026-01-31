@@ -80,7 +80,7 @@ function MentorProfile() {
     const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
 
     return (
-      <span style={{ color: '#ffc107', fontSize: '1.2em' }}>
+      <span className="star-rating">
         {'★'.repeat(fullStars)}
         {hasHalfStar && '½'}
         {'☆'.repeat(emptyStars)}
@@ -88,96 +88,103 @@ function MentorProfile() {
     );
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div className="loading">Loading...</div>;
   if (!profile) return <div className="error">Mentor not found</div>;
+
+  const spotsAvailable = profile.capacity - profile.currentMenteeCount;
 
   return (
     <div>
-      <button
-        className="btn btn-secondary"
-        onClick={() => navigate(-1)}
-        style={{ marginBottom: '20px' }}
-      >
+      <button className="btn btn-secondary btn-sm mb-6" onClick={() => navigate(-1)}>
         Back
       </button>
 
-      <div className="card">
-        <h2>{profile.user.name}</h2>
-        <p>{profile.user.email}</p>
+      <div className="card profile-card">
+        <div className="profile-header">
+          <div className="profile-avatar">
+            {profile.user.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="profile-info">
+            <h2>{profile.user.name}</h2>
+            <p className="text-muted">{profile.user.email}</p>
+          </div>
+        </div>
 
         {/* Rating Display */}
         {mentorRating && (
-          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {renderStars(mentorRating.averageRating)}
-              <span style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
-                {mentorRating.averageRating.toFixed(1)}
-              </span>
-              <span style={{ color: '#6c757d' }}>
-                ({mentorRating.totalRatings} {mentorRating.totalRatings === 1 ? 'rating' : 'ratings'})
-              </span>
-            </div>
+          <div className="rating-display">
+            {renderStars(mentorRating.averageRating)}
+            <span className="rating-value">{mentorRating.averageRating.toFixed(1)}</span>
+            <span className="rating-count">
+              ({mentorRating.totalRatings} {mentorRating.totalRatings === 1 ? 'rating' : 'ratings'})
+            </span>
           </div>
         )}
 
-        <h4 style={{ marginTop: '20px' }}>Skills</h4>
-        <div className="skills-list">
-          {profile.skills.map((skill, idx) => (
-            <span key={idx} className="skill-tag">
-              {skill}
-            </span>
-          ))}
+        <div className="profile-section">
+          <h4 className="profile-section-title">Skills</h4>
+          <div className="skills-list">
+            {profile.skills.map((skill, idx) => (
+              <span key={idx} className="skill-tag">
+                {skill}
+              </span>
+            ))}
+          </div>
         </div>
 
-        <h4 style={{ marginTop: '20px' }}>About</h4>
-        <p>{profile.bio || 'No bio provided'}</p>
+        <div className="profile-section">
+          <h4 className="profile-section-title">About</h4>
+          <p>{profile.bio || 'No bio provided'}</p>
+        </div>
 
-        <h4 style={{ marginTop: '20px' }}>Availability</h4>
-        <p>
+        <div className="profile-section">
+          <h4 className="profile-section-title">Availability</h4>
           {profile.isAvailable ? (
-            <span style={{ color: '#28a745' }}>
-              Available - {profile.capacity - profile.currentMenteeCount} of {profile.capacity} spots open
+            <span className="availability-badge available">
+              {spotsAvailable} of {profile.capacity} spots open
             </span>
           ) : (
-            <span style={{ color: '#dc3545' }}>Currently at full capacity</span>
+            <span className="availability-badge full">
+              Currently at full capacity
+            </span>
           )}
-        </p>
+        </div>
       </div>
 
       {/* Request Form - Only for learners */}
       {user?.role === 'learner' && (
-        <div className="card" style={{ marginTop: '20px' }}>
+        <div className="card mt-6">
           {activeMentorship ? (
             // Learner already has an active mentorship
-            <>
+            <div className="status-message">
               <h3>Mentorship Status</h3>
-              <p style={{ color: '#856404' }}>
+              <p className="text-warning">
                 You already have an active mentorship with {activeMentorship.mentor.name}.
                 Complete your current mentorship before requesting a new one.
               </p>
-            </>
+            </div>
           ) : myRequests.some(
               (r) => r.mentor._id === profile.user._id && r.status === 'pending'
             ) ? (
             // Learner has a pending request to this mentor
-            <>
+            <div className="status-message">
               <h3>Request Pending</h3>
-              <p style={{ color: '#856404' }}>
+              <p className="text-warning">
                 You already have a pending request to this mentor.
               </p>
-            </>
+            </div>
           ) : !profile.isAvailable ? (
             // Mentor is not available
-            <>
+            <div className="status-message">
               <h3>Mentor Unavailable</h3>
-              <p style={{ color: '#dc3545' }}>
+              <p className="text-danger">
                 This mentor is currently at full capacity.
               </p>
-            </>
+            </div>
           ) : (
             // Can send a request
             <>
-              <h3>Send Mentorship Request</h3>
+              <h3 className="card-title mb-4">Send Mentorship Request</h3>
               {error && <div className="error">{error}</div>}
               {success && <div className="success">{success}</div>}
               <form onSubmit={handleSendRequest}>

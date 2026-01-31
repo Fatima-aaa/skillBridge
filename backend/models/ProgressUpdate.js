@@ -23,7 +23,8 @@ const progressUpdateSchema = new mongoose.Schema(
   }
 );
 
-// Index for efficient queries
+// Indexes for efficient queries
 progressUpdateSchema.index({ goal: 1, createdAt: -1 });
+progressUpdateSchema.index({ learner: 1, createdAt: -1 }); // Learner progress history
 
 module.exports = mongoose.model('ProgressUpdate', progressUpdateSchema);

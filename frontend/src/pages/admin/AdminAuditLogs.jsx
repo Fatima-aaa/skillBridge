@@ -50,7 +50,10 @@ function AdminAuditLogs() {
 
   return (
     <div>
-      <h2 className="page-title">Audit Logs</h2>
+      <div className="page-header">
+        <h1 className="page-title">Audit Logs</h1>
+        <p className="page-subtitle">View all admin actions and platform events</p>
+      </div>
 
       {error && <div className="error">{error}</div>}
 
@@ -124,7 +127,7 @@ function AdminAuditLogs() {
           <button disabled={page === 1} onClick={() => setPage(page - 1)}>
             Previous
           </button>
-          <span style={{ padding: '8px 12px' }}>
+          <span className="pagination-info">
             Page {page} of {pagination.totalPages}
           </span>
           <button disabled={page === pagination.totalPages} onClick={() => setPage(page + 1)}>

@@ -28,7 +28,8 @@ function Login() {
   return (
     <div className="auth-container">
       <div className="card">
-        <h2 className="page-title">Login to SkillBridge</h2>
+        <h2>Welcome back</h2>
+        <p className="auth-subtitle">Sign in to your SkillBridge account</p>
         {error && <div className="error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -37,6 +38,7 @@ function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
               required
             />
           </div>
@@ -46,15 +48,16 @@ function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+          <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        <p style={{ marginTop: '15px' }}>
-          Don't have an account? <Link to="/register">Register</Link>
+        <p>
+          Don't have an account? <Link to="/register">Create one</Link>
         </p>
       </div>
     </div>

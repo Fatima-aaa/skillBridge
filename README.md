@@ -361,4 +361,285 @@ All admin actions are immutably logged with:
 | `/api/admin/platform/stats` | GET | Get platform statistics |
 | `/api/admin/audit-logs` | GET | Query audit logs |
 | `/api/admin/audit-logs/recent` | GET | Get recent activity |
-~
+
+---
+
+## Phase 5: Performance & Production Readiness
+
+This phase adds database optimizations, pagination, input validation, and environment configuration for production deployment.
+
+### Environment Setup
+
+SkillBridge supports three environments: **development**, **staging**, and **production**.
+
+#### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+# Environment: development | staging | production
+NODE_ENV=development
+
+# Server
+PORT=5000
+HOST=0.0.0.0
+
+# Database (required)
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/skillbridge
+
+# JWT Authentication (required)
+JWT_SECRET=your_secure_secret_key_min_32_chars
+JWT_EXPIRE=7d
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000    # 15 minutes
+RATE_LIMIT_MAX=100             # requests per window
+
+# Pagination
+PAGINATION_DEFAULT_LIMIT=20
+PAGINATION_MAX_LIMIT=100
+
+# CORS (set to frontend URL in production)
+CORS_ORIGIN=*
+CORS_CREDENTIALS=false
+
+# Scheduler
+SCHEDULER_ENABLED=true
+INACTIVITY_CHECK_CRON=0 9 * * 1
+```
+
+#### Environment-Specific Configuration
+
+| Setting | Development | Staging | Production |
+|---------|-------------|---------|------------|
+| `NODE_ENV` | development | staging | production |
+| `CORS_ORIGIN` | * | staging-url | production-url |
+| `JWT_SECRET` | any | unique | unique & secure |
+| `LOG_LEVEL` | debug | info | error |
+
+### Deployment Steps
+
+#### Prerequisites
+- Node.js 18+
+- MongoDB 6.0+ (Atlas recommended)
+- PM2 or similar process manager (production)
+
+#### Development
+```bash
+# Backend
+cd backend
+cp .env.example .env
+npm install
+npm run dev
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+#### Production
+
+1. **Configure environment**
+   ```bash
+   cd backend
+   cp .env.example .env
+   # Edit .env with production values
+   # IMPORTANT: Change JWT_SECRET!
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install --production
+   ```
+
+3. **Build frontend**
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   ```
+
+4. **Start with PM2**
+   ```bash
+   pm2 start server.js --name skillbridge
+   pm2 save
+   ```
+
+5. **Reverse proxy (nginx example)**
+   ```nginx
+   server {
+       listen 80;
+       server_name yourdomain.com;
+
+       location /api {
+           proxy_pass http://localhost:5000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+       }
+
+       location / {
+           root /path/to/frontend/dist;
+           try_files $uri $uri/ /index.html;
+       }
+   }
+   ```
+
+### Security Enhancements
+
+| Feature | Description |
+|---------|-------------|
+| Input Validation | All inputs validated with express-validator |
+| Body Size Limit | JSON body limited to 10KB |
+| Environment Validation | Required vars checked at startup |
+| Production JWT Check | Prevents default JWT secret in production |
+| CORS Configuration | Configurable origin restrictions |
+
+### Performance Optimizations
+
+#### Database Indexes
+
+Indexes added to optimize common query patterns:
+
+| Collection | Index | Purpose | Expected Improvement |
+|------------|-------|---------|---------------------|
+| **User** | `{ role: 1, status: 1 }` | Admin user listing | 50-70% faster user queries |
+| **User** | `{ status: 1, createdAt: -1 }` | Status filtering with sort | Faster sorted queries |
+| **User** | `{ name: 'text', email: 'text' }` | Text search | Full-text search capability |
+| **MentorProfile** | `{ currentMenteeCount: 1, capacity: 1 }` | Availability checks | Instant availability filtering |
+| **MentorProfile** | `{ createdAt: -1 }` | Newest mentors | Faster "newest" sort |
+| **Goal** | `{ mentorship: 1, status: 1 }` | Goals by mentorship & status | Faster goal filtering |
+| **Goal** | `{ learner: 1, status: 1, createdAt: -1 }` | Learner goals with status | Composite query optimization |
+| **ProgressUpdate** | `{ learner: 1, createdAt: -1 }` | Learner progress history | Faster progress queries |
+
+**Pre-existing indexes** (from earlier phases):
+- MentorshipRequest: compound indexes for learner/mentor/status queries
+- WeeklyCheckIn: indexes for goal/week uniqueness and mentorship queries
+- AdminAuditLog: indexes for admin, action type, and timestamp queries
+
+#### Pagination
+
+All list endpoints now support pagination:
+
+| Parameter | Type | Default | Max | Description |
+|-----------|------|---------|-----|-------------|
+| `page` | number | 1 | - | Page number (1-indexed) |
+| `limit` | number | 20 | 100 | Items per page |
+| `sortBy` | string | createdAt | - | Field to sort by |
+| `sortOrder` | string | desc | - | asc or desc |
+
+**Response format:**
+```json
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "totalPages": 8,
+    "hasNextPage": true,
+    "hasPrevPage": false
+  }
+}
+```
+
+### Paginated API Examples
+
+#### Get Mentor Profiles (with pagination)
+```bash
+# First page, 10 items, sorted by rating
+GET /api/mentor-profiles?page=1&limit=10&sortBy=rating&sortOrder=desc
+
+# Filter by skill and availability
+GET /api/mentor-profiles?skill=javascript&onlyAvailable=true&page=1&limit=20
+```
+
+#### Get My Goals (with filtering)
+```bash
+# All goals, paginated
+GET /api/goals?page=1&limit=10
+
+# Only active goals
+GET /api/goals?status=active&page=1&limit=10
+```
+
+#### Get Mentorship Requests
+```bash
+# Incoming requests for mentor (with status filter)
+GET /api/mentorships/requests?status=pending&page=1&limit=20
+
+# My requests as learner
+GET /api/mentorships/my-requests?page=1&limit=10
+```
+
+#### Get Check-ins
+```bash
+# All my check-ins
+GET /api/check-ins/my?page=1&limit=20
+
+# Mentee check-ins (as mentor)
+GET /api/check-ins/mentee/:menteeId?page=1&limit=20
+```
+
+#### Get Progress Updates
+```bash
+GET /api/progress/:goalId?page=1&limit=10
+```
+
+#### Admin: List Users
+```bash
+# With search and filters
+GET /api/admin/users?search=john&role=learner&status=active&page=1&limit=20
+```
+
+### Input Validation
+
+All endpoints validate input using express-validator. Validation errors return:
+
+```json
+{
+  "success": false,
+  "error": "Validation failed",
+  "details": [
+    {
+      "field": "email",
+      "message": "Invalid email format",
+      "value": "invalid-email"
+    }
+  ]
+}
+```
+
+**Validation rules:**
+- Email: valid format, normalized
+- Password: minimum 6 characters
+- Name: 2-50 characters, letters only
+- Skills: array with 1+ items, each 1-50 chars
+- Bio: max 500 characters
+- Ratings: integer 1-5
+- Pagination: page >= 1, limit 1-100
+
+### API Health Check
+
+```bash
+GET /api/health
+
+# Response
+{
+  "success": true,
+  "message": "SkillBridge API is running",
+  "environment": "development",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+```
+
+---
+
+<br><br><br><br><br>
+
+---
+

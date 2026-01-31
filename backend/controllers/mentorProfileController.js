@@ -5,6 +5,7 @@ const {
   getMentorProfileWithReputation,
   getAllMentorsWithReputation,
 } = require('../services/reputationService');
+const { parsePaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
 // @desc    Create mentor profile
 // @route   POST /api/mentor-profiles
@@ -93,35 +94,60 @@ const getMyProfile = asyncHandler(async (req, res, next) => {
 // @desc    Get all mentor profiles (for learners to browse)
 // @route   GET /api/mentor-profiles
 // @access  Private
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20, max: 100)
 // @query   sortBy - rating, experience, trust, reviews, newest (default: rating)
 // @query   onlyAvailable - true/false (default: false)
 // @query   includeReputation - true/false (default: true)
+// @query   skill - Filter by skill
 const getAllProfiles = asyncHandler(async (req, res, next) => {
-  const { sortBy, onlyAvailable, includeReputation } = req.query;
+  const { sortBy, onlyAvailable, includeReputation, skill } = req.query;
+  const { page, limit, skip, sort } = parsePaginationParams(req.query);
 
-  // If reputation not needed, return basic profiles (backward compatible)
+  // If reputation not needed, return basic profiles with pagination
   if (includeReputation === 'false') {
-    const profiles = await MentorProfile.find()
-      .populate('user', 'name email')
-      .select('-__v');
+    const query = {};
+    if (skill) {
+      query.skills = { $regex: skill, $options: 'i' };
+    }
+    if (onlyAvailable === 'true') {
+      query.$expr = { $lt: ['$currentMenteeCount', '$capacity'] };
+    }
+
+    const [profiles, total] = await Promise.all([
+      MentorProfile.find(query)
+        .populate('user', 'name email')
+        .select('-__v')
+        .sort(sort)
+        .skip(skip)
+        .limit(limit),
+      MentorProfile.countDocuments(query),
+    ]);
 
     return res.status(200).json({
       success: true,
-      count: profiles.length,
       data: profiles,
+      pagination: buildPaginationMeta(total, page, limit),
     });
   }
 
-  // Get profiles with reputation data
-  const mentors = await getAllMentorsWithReputation({
+  // Get profiles with reputation data (includes pagination)
+  const result = await getAllMentorsWithReputation({
     sortBy: sortBy || 'rating',
     onlyAvailable: onlyAvailable === 'true',
+    skill,
+    page,
+    limit,
   });
 
   res.status(200).json({
     success: true,
-    count: mentors.length,
-    data: mentors,
+    data: result.mentors || result,
+    pagination: result.pagination || buildPaginationMeta(
+      Array.isArray(result) ? result.length : result.mentors?.length || 0,
+      page,
+      limit
+    ),
   });
 });
 

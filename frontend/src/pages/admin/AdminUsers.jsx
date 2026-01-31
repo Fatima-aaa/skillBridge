@@ -110,7 +110,10 @@ function AdminUsers() {
 
   return (
     <div>
-      <h2 className="page-title">User Management</h2>
+      <div className="page-header">
+        <h1 className="page-title">User Management</h1>
+        <p className="page-subtitle">View and manage platform users</p>
+      </div>
 
       {error && <div className="error">{error}</div>}
 
@@ -121,7 +124,7 @@ function AdminUsers() {
           placeholder="Search by name or email..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ minWidth: '250px' }}
+          className="search-input"
         />
         <select value={role} onChange={(e) => { setRole(e.target.value); setPage(1); }}>
           <option value="">All Roles</option>
@@ -259,7 +262,7 @@ function AdminUsers() {
             <h3>Reinstate User</h3>
             <p>You are about to reinstate <strong>{selectedUser.name}</strong> ({selectedUser.email})</p>
             {selectedUser.suspendedReason && (
-              <p style={{ color: '#6c757d', fontSize: '0.9rem' }}>
+              <p className="text-muted text-sm">
                 <strong>Suspension reason:</strong> {selectedUser.suspendedReason}
               </p>
             )}
@@ -289,7 +292,7 @@ function AdminUsers() {
 
       {modalType === 'view' && selectedUser && selectedUser.activity && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
             <h3>User Activity: {selectedUser.name}</h3>
 
             <div className="user-detail-header">
@@ -301,7 +304,7 @@ function AdminUsers() {
                   </span>
                 </p>
                 {selectedUser.activity.user.suspendedReason && (
-                  <p className="user-meta" style={{ color: '#dc3545' }}>
+                  <p className="user-meta text-danger">
                     Suspended: {selectedUser.activity.user.suspendedReason}
                   </p>
                 )}
@@ -310,7 +313,7 @@ function AdminUsers() {
 
             <div className="activity-section">
               <h4>Activity Summary</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div className="activity-grid">
                 <div className="card">
                   <strong>Mentorships:</strong> {selectedUser.activity.activity.mentorships?.total || 0}
                   <br />

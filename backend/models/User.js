@@ -56,6 +56,11 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Indexes for efficient queries
+userSchema.index({ role: 1, status: 1 }); // Admin user listing queries
+userSchema.index({ status: 1, createdAt: -1 }); // Status-based queries with sorting
+userSchema.index({ name: 'text', email: 'text' }); // Text search for admin search functionality
+
 // Hash password before saving
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) {

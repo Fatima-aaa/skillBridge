@@ -1,26 +1,40 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function Navbar() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+
+  const isActive = (path) => {
+    if (path === '/') return location.pathname === '/';
+    return location.pathname.startsWith(path);
+  };
 
   return (
     <nav className="navbar">
       <div className="navbar-content">
-        <h1>SkillBridge</h1>
+        <Link to="/" style={{ textDecoration: 'none' }}>
+          <h1>SkillBridge</h1>
+        </Link>
         <div className="navbar-links">
-          <Link to="/">Dashboard</Link>
+          <Link to="/" className={isActive('/') && location.pathname === '/' ? 'active' : ''}>
+            Dashboard
+          </Link>
           {user?.role === 'learner' && (
             <>
-              <Link to="/mentors">Find Mentors</Link>
-              <Link to="/goals">My Goals</Link>
+              <Link to="/mentors" className={isActive('/mentors') ? 'active' : ''}>
+                Find Mentors
+              </Link>
+              <Link to="/goals" className={isActive('/goals') ? 'active' : ''}>
+                My Goals
+              </Link>
             </>
           )}
-          <span>
-            {user?.name} ({user?.role})
+          <span className="navbar-user">
+            {user?.name}
           </span>
-          <button className="btn btn-secondary" onClick={logout}>
-            Logout
+          <button className="btn btn-secondary btn-sm" onClick={logout}>
+            Log out
           </button>
         </div>
       </div>

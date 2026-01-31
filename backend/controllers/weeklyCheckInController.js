@@ -5,6 +5,7 @@ const {
   resetInactivityOnCheckIn,
   getLearnerConsistencySummary,
 } = require('../services/inactivityService');
+const { parsePaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
 /**
  * Helper to get week boundaries (Monday to Sunday)
@@ -139,15 +140,24 @@ const getMyCheckInsForGoal = asyncHandler(async (req, res, next) => {
 // @desc    Get all my check-ins
 // @route   GET /api/check-ins/my
 // @access  Private (Learner only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
 const getAllMyCheckIns = asyncHandler(async (req, res, next) => {
-  const checkIns = await WeeklyCheckIn.find({ learner: req.user.id })
-    .populate('goal', 'title status')
-    .sort({ weekStartDate: -1 });
+  const { page, limit, skip } = parsePaginationParams(req.query);
+
+  const [checkIns, total] = await Promise.all([
+    WeeklyCheckIn.find({ learner: req.user.id })
+      .populate('goal', 'title status')
+      .sort({ weekStartDate: -1 })
+      .skip(skip)
+      .limit(limit),
+    WeeklyCheckIn.countDocuments({ learner: req.user.id }),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: checkIns.length,
     data: checkIns,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 
@@ -191,8 +201,11 @@ const getMenteeCheckInsForGoal = asyncHandler(async (req, res, next) => {
 // @desc    Get all check-ins for a mentee (Mentor view)
 // @route   GET /api/check-ins/mentee/:menteeId
 // @access  Private (Mentor only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
 const getMenteeAllCheckIns = asyncHandler(async (req, res, next) => {
   const { menteeId } = req.params;
+  const { page, limit, skip } = parsePaginationParams(req.query);
 
   // Verify this is the mentor's mentee
   const mentorship = await MentorshipRequest.findOne({
@@ -205,16 +218,21 @@ const getMenteeAllCheckIns = asyncHandler(async (req, res, next) => {
     return next(new AppError('This learner is not your mentee', 403));
   }
 
-  const checkIns = await WeeklyCheckIn.find({
-    mentorship: mentorship._id,
-  })
-    .populate('goal', 'title status')
-    .sort({ weekStartDate: -1 });
+  const query = { mentorship: mentorship._id };
+
+  const [checkIns, total] = await Promise.all([
+    WeeklyCheckIn.find(query)
+      .populate('goal', 'title status')
+      .sort({ weekStartDate: -1 })
+      .skip(skip)
+      .limit(limit),
+    WeeklyCheckIn.countDocuments(query),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: checkIns.length,
     data: checkIns,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 

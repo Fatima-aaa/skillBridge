@@ -28,7 +28,7 @@ function AdminLogin() {
   return (
     <div className="admin-login-container">
       <div className="admin-login-card">
-        <h2>SkillBridge Admin</h2>
+        <h2>SkillBridge</h2>
         <div className="admin-label">
           <span className="admin-badge">Admin Portal</span>
         </div>
@@ -40,6 +40,7 @@ function AdminLogin() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@example.com"
               required
             />
           </div>
@@ -49,11 +50,12 @@ function AdminLogin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+          <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
       </div>

@@ -1,29 +1,59 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+
+// Load env vars first
+dotenv.config();
+
+const { config, validateEnv } = require('./config/env');
 const connectDB = require('./config/db');
 const routes = require('./routes');
 const errorHandler = require('./middleware/errorHandler');
 const { initializeScheduler, stopScheduler } = require('./services/scheduler');
 
-// Load env vars
-dotenv.config();
+// Validate environment variables
+try {
+  validateEnv();
+} catch (error) {
+  console.error(`Configuration Error: ${error.message}`);
+  process.exit(1);
+}
 
 // Connect to database
 connectDB().then(() => {
   // Initialize scheduler after DB connection is established
-  initializeScheduler();
+  if (config.scheduler.enabled) {
+    initializeScheduler();
+  }
 });
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Security & CORS middleware
+app.use(cors({
+  origin: config.cors.origin,
+  credentials: config.cors.credentials,
+}));
+
+// Body parser
+app.use(express.json({ limit: '10kb' })); // Limit body size
+
+// Request logging in development
+if (config.isDevelopment) {
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
+  });
+}
 
 // Health check route
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ success: true, message: 'SkillBridge API is running' });
+  res.status(200).json({
+    success: true,
+    message: 'SkillBridge API is running',
+    environment: config.env,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Mount routes
@@ -37,10 +67,8 @@ app.use((req, res, next) => {
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-
-const server = app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const server = app.listen(config.port, config.host, () => {
+  console.log(`Server running in ${config.env} mode on port ${config.port}`);
 });
 
 // Handle unhandled promise rejections

@@ -2,6 +2,7 @@ const { ProgressUpdate, Goal, MentorshipRequest } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
 const { resetInactivityOnProgressUpdate } = require('../services/inactivityService');
+const { parsePaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
 // @desc    Create progress update for a goal
 // @route   POST /api/progress/:goalId
@@ -40,8 +41,11 @@ const createProgressUpdate = asyncHandler(async (req, res, next) => {
 // @desc    Get progress updates for a goal
 // @route   GET /api/progress/:goalId
 // @access  Private
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
 const getProgressUpdates = asyncHandler(async (req, res, next) => {
   const { goalId } = req.params;
+  const { page, limit, skip } = parsePaginationParams(req.query);
 
   const goal = await Goal.findById(goalId);
 
@@ -67,14 +71,19 @@ const getProgressUpdates = asyncHandler(async (req, res, next) => {
     }
   }
 
-  const updates = await ProgressUpdate.find({ goal: goalId })
-    .populate('learner', 'name')
-    .sort('-createdAt');
+  const [updates, total] = await Promise.all([
+    ProgressUpdate.find({ goal: goalId })
+      .populate('learner', 'name')
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit),
+    ProgressUpdate.countDocuments({ goal: goalId }),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: updates.length,
     data: updates,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 

@@ -34,6 +34,17 @@ api.interceptors.response.use(
   }
 );
 
+// Helper to build query params
+const buildParams = (params = {}) => {
+  const cleanParams = {};
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanParams[key] = value;
+    }
+  });
+  return cleanParams;
+};
+
 // Auth
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
@@ -43,7 +54,7 @@ export const authAPI = {
 
 // Mentor Profiles
 export const mentorProfileAPI = {
-  getAll: () => api.get('/mentor-profiles'),
+  getAll: (params = {}) => api.get('/mentor-profiles', { params: buildParams(params) }),
   getOne: (id) => api.get(`/mentor-profiles/${id}`),
   getMyProfile: () => api.get('/mentor-profiles/me'),
   create: (data) => api.post('/mentor-profiles', data),
@@ -53,22 +64,22 @@ export const mentorProfileAPI = {
 // Mentorship
 export const mentorshipAPI = {
   sendRequest: (data) => api.post('/mentorships', data),
-  getMyRequests: () => api.get('/mentorships/my-requests'),
-  getIncomingRequests: () => api.get('/mentorships/requests'),
+  getMyRequests: (params = {}) => api.get('/mentorships/my-requests', { params: buildParams(params) }),
+  getIncomingRequests: (params = {}) => api.get('/mentorships/requests', { params: buildParams(params) }),
   updateStatus: (id, status) => api.put(`/mentorships/${id}`, { status }),
   getActiveMentorship: () => api.get('/mentorships/active'),
   getMentees: () => api.get('/mentorships/mentees'),
   completeMentorship: (id) => api.put(`/mentorships/${id}/complete`),
   reactivateMentorship: (id, reason) => api.put(`/mentorships/${id}/reactivate`, { reason }),
-  getCompletedMentorships: () => api.get('/mentorships/completed'),
+  getCompletedMentorships: (params = {}) => api.get('/mentorships/completed', { params: buildParams(params) }),
 };
 
 // Goals
 export const goalAPI = {
   // Mentor creates goal for mentee
   createForMentee: (data) => api.post('/goals', data),
-  getMyGoals: () => api.get('/goals'),
-  getMenteeGoals: (menteeId) => api.get(`/goals/mentee/${menteeId}`),
+  getMyGoals: (params = {}) => api.get('/goals', { params: buildParams(params) }),
+  getMenteeGoals: (menteeId, params = {}) => api.get(`/goals/mentee/${menteeId}`, { params: buildParams(params) }),
   getOne: (id) => api.get(`/goals/${id}`),
   // Mentor updates goal status
   updateStatus: (id, status) => api.put(`/goals/${id}`, { status }),
@@ -77,7 +88,18 @@ export const goalAPI = {
 // Progress
 export const progressAPI = {
   create: (goalId, content) => api.post(`/progress/${goalId}`, { content }),
-  getByGoal: (goalId) => api.get(`/progress/${goalId}`),
+  getByGoal: (goalId, params = {}) => api.get(`/progress/${goalId}`, { params: buildParams(params) }),
+};
+
+// Weekly Check-ins
+export const checkInAPI = {
+  submit: (goalId, data) => api.post(`/check-ins/${goalId}`, data),
+  getMyCheckInsForGoal: (goalId) => api.get(`/check-ins/goal/${goalId}`),
+  getAllMyCheckIns: (params = {}) => api.get('/check-ins/my', { params: buildParams(params) }),
+  getMenteeCheckInsForGoal: (menteeId, goalId) => api.get(`/check-ins/mentee/${menteeId}/goal/${goalId}`),
+  getMenteeAllCheckIns: (menteeId, params = {}) => api.get(`/check-ins/mentee/${menteeId}`, { params: buildParams(params) }),
+  getMenteeConsistencySummary: (menteeId, weeks = 12) => api.get(`/check-ins/mentee/${menteeId}/summary`, { params: { weeks } }),
+  getGoalTimeline: (goalId, weeks = 12) => api.get(`/check-ins/timeline/${goalId}`, { params: { weeks } }),
 };
 
 // Reviews (Learner → Mentor ratings)

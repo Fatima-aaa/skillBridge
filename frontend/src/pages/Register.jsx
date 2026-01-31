@@ -30,15 +30,17 @@ function Register() {
   return (
     <div className="auth-container">
       <div className="card">
-        <h2 className="page-title">Create Account</h2>
+        <h2>Create your account</h2>
+        <p className="auth-subtitle">Join SkillBridge and start learning</p>
         {error && <div className="error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Name</label>
+            <label>Full name</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="John Doe"
               required
             />
           </div>
@@ -48,6 +50,7 @@ function Register() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
               required
             />
           </div>
@@ -57,6 +60,7 @@ function Register() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min. 6 characters"
               minLength={6}
               required
             />
@@ -64,16 +68,16 @@ function Register() {
           <div className="form-group">
             <label>I want to join as</label>
             <select value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="learner">Learner</option>
-              <option value="mentor">Mentor</option>
+              <option value="learner">Learner - I want to learn new skills</option>
+              <option value="mentor">Mentor - I want to help others learn</option>
             </select>
           </div>
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? 'Creating account...' : 'Register'}
+          <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+            {loading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
-        <p style={{ marginTop: '15px' }}>
-          Already have an account? <Link to="/login">Login</Link>
+        <p>
+          Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

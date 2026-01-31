@@ -114,7 +114,10 @@ function AdminMentorships() {
 
   return (
     <div>
-      <h2 className="page-title">Mentorship Management</h2>
+      <div className="page-header">
+        <h1 className="page-title">Mentorship Management</h1>
+        <p className="page-subtitle">View and manage platform mentorships</p>
+      </div>
 
       {error && <div className="error">{error}</div>}
 
@@ -149,17 +152,17 @@ function AdminMentorships() {
               <td>
                 {m.learner?.name || 'Unknown'}
                 <br />
-                <small style={{ color: '#6c757d' }}>{m.learner?.email}</small>
+                <small className="text-muted">{m.learner?.email}</small>
                 {m.learner?.status === 'suspended' && (
-                  <span className="badge badge-suspended" style={{ marginLeft: '5px' }}>Suspended</span>
+                  <span className="badge badge-suspended" className="ml-2">Suspended</span>
                 )}
               </td>
               <td>
                 {m.mentor?.name || 'Unknown'}
                 <br />
-                <small style={{ color: '#6c757d' }}>{m.mentor?.email}</small>
+                <small className="text-muted">{m.mentor?.email}</small>
                 {m.mentor?.status === 'suspended' && (
-                  <span className="badge badge-suspended" style={{ marginLeft: '5px' }}>Suspended</span>
+                  <span className="badge badge-suspended" className="ml-2">Suspended</span>
                 )}
               </td>
               <td>
@@ -311,7 +314,7 @@ function AdminMentorships() {
                   <div className="card">
                     <h4>Learner</h4>
                     <p><strong>{selectedMentorship.learner?.name}</strong></p>
-                    <p style={{ color: '#6c757d' }}>{selectedMentorship.learner?.email}</p>
+                    <p className="text-muted">{selectedMentorship.learner?.email}</p>
                     <span className={`badge badge-${selectedMentorship.learner?.status === 'active' ? 'accepted' : 'suspended'}`}>
                       {selectedMentorship.learner?.status}
                     </span>
@@ -319,7 +322,7 @@ function AdminMentorships() {
                   <div className="card">
                     <h4>Mentor</h4>
                     <p><strong>{selectedMentorship.mentor?.name}</strong></p>
-                    <p style={{ color: '#6c757d' }}>{selectedMentorship.mentor?.email}</p>
+                    <p className="text-muted">{selectedMentorship.mentor?.email}</p>
                     <span className={`badge badge-${selectedMentorship.mentor?.status === 'active' ? 'accepted' : 'suspended'}`}>
                       {selectedMentorship.mentor?.status}
                     </span>

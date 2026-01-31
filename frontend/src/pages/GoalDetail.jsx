@@ -52,18 +52,18 @@ function GoalDetail() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  const getStatusLabel = (status) => {
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  if (loading) return <div className="loading">Loading...</div>;
   if (!goal) return <div className="error">Goal not found</div>;
 
   const isOwner = user?.role === 'learner' && goal.learner._id === user.id;
 
   return (
     <div>
-      <button
-        className="btn btn-secondary"
-        onClick={() => navigate(-1)}
-        style={{ marginBottom: '20px' }}
-      >
+      <button className="btn btn-secondary btn-sm mb-6" onClick={() => navigate(-1)}>
         Back
       </button>
 
@@ -71,17 +71,25 @@ function GoalDetail() {
 
       {/* Goal Details */}
       <div className="card">
-        <h2>{goal.title}</h2>
-        <span className={`badge badge-${goal.status}`}>{goal.status}</span>
-        <p style={{ marginTop: '15px' }}>{goal.description}</p>
-        <small style={{ color: '#6c757d' }}>
-          Created by: {goal.learner.name} on {new Date(goal.createdAt).toLocaleDateString()}
-        </small>
+        <div className="card-header">
+          <div>
+            <h2 className="card-title" style={{ fontSize: 'var(--font-size-2xl)' }}>
+              {goal.title}
+            </h2>
+            <p className="card-subtitle">
+              Created by {goal.learner.name} on {new Date(goal.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <span className={`badge badge-${goal.status}`}>
+            {getStatusLabel(goal.status)}
+          </span>
+        </div>
+        <p className="card-body">{goal.description}</p>
       </div>
 
       {/* Progress Update Form - Only for goal owner */}
       {isOwner && (
-        <div className="card" style={{ marginTop: '20px' }}>
+        <div className="section-card mt-6">
           <h3>Add Progress Update</h3>
           <form onSubmit={handleSubmitProgress}>
             <div className="form-group">
@@ -103,21 +111,26 @@ function GoalDetail() {
       )}
 
       {/* Progress Updates List */}
-      <div style={{ marginTop: '20px' }}>
-        <h3>Progress Updates</h3>
+      <div className="mt-6">
+        <h3 className="section-title">Progress Timeline</h3>
         {progressUpdates.length === 0 ? (
-          <div className="card empty-state">
-            <p>No progress updates yet</p>
+          <div className="card">
+            <div className="empty-state">
+              <h3>No progress updates yet</h3>
+              <p>Start documenting your progress to track your learning journey</p>
+            </div>
           </div>
         ) : (
-          progressUpdates.map((update) => (
-            <div className="progress-item" key={update._id}>
-              <p>{update.content}</p>
-              <small>
-                {update.learner.name} - {new Date(update.createdAt).toLocaleString()}
-              </small>
-            </div>
-          ))
+          <div className="progress-timeline">
+            {progressUpdates.map((update) => (
+              <div className="progress-item" key={update._id}>
+                <p>{update.content}</p>
+                <small>
+                  {update.learner.name} &middot; {new Date(update.createdAt).toLocaleString()}
+                </small>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

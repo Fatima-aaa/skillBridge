@@ -1,6 +1,7 @@
 const { Goal, MentorshipRequest, ProgressUpdate } = require('../models');
 const asyncHandler = require('../utils/asyncHandler');
 const AppError = require('../utils/AppError');
+const { parsePaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
 // @desc    Create a goal for mentee (Mentor only)
 // @route   POST /api/goals
@@ -37,21 +38,40 @@ const createGoal = asyncHandler(async (req, res, next) => {
 // @desc    Get learner's goals
 // @route   GET /api/goals
 // @access  Private (Learner only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
+// @query   status - Filter by status (active, completed)
 const getMyGoals = asyncHandler(async (req, res, next) => {
-  const goals = await Goal.find({ learner: req.user.id }).sort('-createdAt');
+  const { status } = req.query;
+  const { page, limit, skip } = parsePaginationParams(req.query);
+
+  const query = { learner: req.user.id };
+  if (status && ['active', 'completed'].includes(status)) {
+    query.status = status;
+  }
+
+  const [goals, total] = await Promise.all([
+    Goal.find(query).sort('-createdAt').skip(skip).limit(limit),
+    Goal.countDocuments(query),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: goals.length,
     data: goals,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 
 // @desc    Get goals for a specific mentee (Mentor only)
 // @route   GET /api/goals/mentee/:menteeId
 // @access  Private (Mentor only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
+// @query   status - Filter by status (active, completed)
 const getMenteeGoals = asyncHandler(async (req, res, next) => {
   const { menteeId } = req.params;
+  const { status } = req.query;
+  const { page, limit, skip } = parsePaginationParams(req.query);
 
   // Verify this is the mentor's mentee
   const mentorship = await MentorshipRequest.findOne({
@@ -64,15 +84,20 @@ const getMenteeGoals = asyncHandler(async (req, res, next) => {
     return next(new AppError('This learner is not your mentee', 403));
   }
 
-  const goals = await Goal.find({
-    learner: menteeId,
-    mentorship: mentorship._id,
-  }).sort('-createdAt');
+  const query = { learner: menteeId, mentorship: mentorship._id };
+  if (status && ['active', 'completed'].includes(status)) {
+    query.status = status;
+  }
+
+  const [goals, total] = await Promise.all([
+    Goal.find(query).sort('-createdAt').skip(skip).limit(limit),
+    Goal.countDocuments(query),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: goals.length,
     data: goals,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 

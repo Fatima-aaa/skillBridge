@@ -47,7 +47,9 @@ mentorProfileSchema.virtual('isAvailable').get(function () {
   return this.currentMenteeCount < this.capacity;
 });
 
-// Index for efficient queries
+// Indexes for efficient queries
 mentorProfileSchema.index({ skills: 1 });
+mentorProfileSchema.index({ currentMenteeCount: 1, capacity: 1 }); // Availability queries
+mentorProfileSchema.index({ createdAt: -1 }); // Newest mentors
 
 module.exports = mongoose.model('MentorProfile', mentorProfileSchema);

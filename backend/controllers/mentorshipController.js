@@ -9,6 +9,7 @@ const {
   processInactivityForMentorship,
 } = require('../services/inactivityService');
 const { getLearnerReliabilitySummary } = require('../services/reliabilityService');
+const { parsePaginationParams, buildPaginationMeta } = require('../utils/pagination');
 
 // @desc    Send mentorship request (Learner)
 // @route   POST /api/mentorships
@@ -70,15 +71,27 @@ const sendRequest = asyncHandler(async (req, res, next) => {
 // @desc    Get incoming requests (Mentor)
 // @route   GET /api/mentorships/requests
 // @access  Private (Mentor only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
+// @query   status - Filter by status (pending, active, etc.)
 // @query   includeReliability - true/false (default: true for pending requests)
 const getIncomingRequests = asyncHandler(async (req, res, next) => {
-  const { includeReliability } = req.query;
+  const { includeReliability, status } = req.query;
+  const { page, limit, skip } = parsePaginationParams(req.query);
 
-  const requests = await MentorshipRequest.find({
-    mentor: req.user.id,
-  })
-    .populate('learner', 'name email')
-    .sort('-createdAt');
+  const query = { mentor: req.user.id };
+  if (status) {
+    query.status = status;
+  }
+
+  const [requests, total] = await Promise.all([
+    MentorshipRequest.find(query)
+      .populate('learner', 'name email')
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit),
+    MentorshipRequest.countDocuments(query),
+  ]);
 
   // Include reliability info for pending requests by default
   if (includeReliability !== 'false') {
@@ -98,32 +111,46 @@ const getIncomingRequests = asyncHandler(async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      count: requestsWithReliability.length,
       data: requestsWithReliability,
+      pagination: buildPaginationMeta(total, page, limit),
     });
   }
 
   res.status(200).json({
     success: true,
-    count: requests.length,
     data: requests,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 
 // @desc    Get my requests as a learner
 // @route   GET /api/mentorships/my-requests
 // @access  Private (Learner only)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
+// @query   status - Filter by status
 const getMyRequests = asyncHandler(async (req, res, next) => {
-  const requests = await MentorshipRequest.find({
-    learner: req.user.id,
-  })
-    .populate('mentor', 'name email')
-    .sort('-createdAt');
+  const { status } = req.query;
+  const { page, limit, skip } = parsePaginationParams(req.query);
+
+  const query = { learner: req.user.id };
+  if (status) {
+    query.status = status;
+  }
+
+  const [requests, total] = await Promise.all([
+    MentorshipRequest.find(query)
+      .populate('mentor', 'name email')
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(limit),
+    MentorshipRequest.countDocuments(query),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: requests.length,
     data: requests,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 
@@ -489,24 +516,32 @@ const completeMentorship = asyncHandler(async (req, res, next) => {
 // @desc    Get completed mentorships for current user
 // @route   GET /api/mentorships/completed
 // @access  Private (Mentor or Learner)
+// @query   page - Page number (default: 1)
+// @query   limit - Items per page (default: 20)
 const getCompletedMentorships = asyncHandler(async (req, res, next) => {
-  let query = {};
+  const { page, limit, skip } = parsePaginationParams(req.query);
 
+  let query = {};
   if (req.user.role === 'mentor') {
     query = { mentor: req.user.id, status: 'completed' };
   } else {
     query = { learner: req.user.id, status: 'completed' };
   }
 
-  const mentorships = await MentorshipRequest.find(query)
-    .populate('learner', 'name email')
-    .populate('mentor', 'name email')
-    .sort('-completedAt');
+  const [mentorships, total] = await Promise.all([
+    MentorshipRequest.find(query)
+      .populate('learner', 'name email')
+      .populate('mentor', 'name email')
+      .sort('-completedAt')
+      .skip(skip)
+      .limit(limit),
+    MentorshipRequest.countDocuments(query),
+  ]);
 
   res.status(200).json({
     success: true,
-    count: mentorships.length,
     data: mentorships,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 

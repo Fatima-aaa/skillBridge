@@ -27,33 +27,36 @@ function MentorList() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  if (loading) return <div className="loading">Loading...</div>;
 
   return (
     <div>
-      <h2 className="page-title">Find a Mentor</h2>
+      <div className="page-header">
+        <h1 className="page-title">Find a Mentor</h1>
+        <p className="page-subtitle">Browse available mentors and start your learning journey</p>
+      </div>
+
       {error && <div className="error">{error}</div>}
 
       {/* Show banner if learner has active mentorship */}
       {hasActiveMentorship && (
-        <div className="card" style={{
-          backgroundColor: '#fff3cd',
-          borderColor: '#ffc107',
-          marginBottom: '20px'
-        }}>
-          <p style={{ margin: 0, color: '#856404' }}>
-            <strong>Note:</strong> You already have an active mentorship.
-            You can browse mentors but cannot send new requests until your current mentorship is completed.
-          </p>
-          <Link to="/dashboard" className="btn btn-secondary" style={{ marginTop: '10px' }}>
-            Go to Dashboard
-          </Link>
+        <div className="alert alert-warning">
+          <strong>Note:</strong> You already have an active mentorship.
+          You can browse mentors but cannot send new requests until your current mentorship is completed.
+          <div className="mt-4">
+            <Link to="/" className="btn btn-secondary btn-sm">
+              Go to Dashboard
+            </Link>
+          </div>
         </div>
       )}
 
       {mentors.length === 0 ? (
-        <div className="card empty-state">
-          <p>No mentors available at the moment</p>
+        <div className="card">
+          <div className="empty-state">
+            <h3>No mentors available</h3>
+            <p>Check back later for available mentors</p>
+          </div>
         </div>
       ) : (
         <div className="grid">
@@ -61,11 +64,24 @@ function MentorList() {
             // Handle both old format (direct profile) and new format (profile wrapper with reputation)
             const profile = mentor.profile || mentor;
             const profileId = profile.id || profile._id;
+            const spotsAvailable = profile.capacity - profile.currentMenteeCount;
 
             return (
-              <div className="card" key={profileId}>
-                <h3>{profile.user.name}</h3>
-                <p>{profile.user.email}</p>
+              <div className="card mentor-card" key={profileId}>
+                <div className="card-header">
+                  <div>
+                    <h3 className="card-title">{profile.user.name}</h3>
+                    <p className="card-subtitle">{profile.user.email}</p>
+                  </div>
+                  {profile.isAvailable ? (
+                    <span className="badge badge-active">
+                      {spotsAvailable} {spotsAvailable === 1 ? 'spot' : 'spots'}
+                    </span>
+                  ) : (
+                    <span className="badge badge-paused">Full</span>
+                  )}
+                </div>
+
                 <div className="skills-list">
                   {profile.skills.map((skill, idx) => (
                     <span key={idx} className="skill-tag">
@@ -73,26 +89,16 @@ function MentorList() {
                     </span>
                   ))}
                 </div>
-                <p style={{ marginTop: '10px' }}>
+
+                <p className="card-body mt-4">
                   {profile.bio || 'No bio provided'}
                 </p>
-                <p>
-                  <strong>Availability:</strong>{' '}
-                  {profile.isAvailable ? (
-                    <span style={{ color: '#28a745' }}>
-                      Available ({profile.capacity - profile.currentMenteeCount} spots)
-                    </span>
-                  ) : (
-                    <span style={{ color: '#dc3545' }}>At capacity</span>
-                  )}
-                </p>
-                <Link
-                  to={`/mentors/${profileId}`}
-                  className="btn btn-primary"
-                  style={{ marginTop: '10px' }}
-                >
-                  View Profile
-                </Link>
+
+                <div className="card-footer">
+                  <Link to={`/mentors/${profileId}`} className="btn btn-primary">
+                    View Profile
+                  </Link>
+                </div>
               </div>
             );
           })}

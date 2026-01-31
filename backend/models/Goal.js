@@ -34,8 +34,10 @@ const goalSchema = new mongoose.Schema(
   }
 );
 
-// Index for efficient queries
+// Indexes for efficient queries
 goalSchema.index({ mentorship: 1 });
 goalSchema.index({ learner: 1 });
+goalSchema.index({ mentorship: 1, status: 1 }); // Queries for active/completed goals per mentorship
+goalSchema.index({ learner: 1, status: 1, createdAt: -1 }); // Learner goals with status filtering
 
 module.exports = mongoose.model('Goal', goalSchema);

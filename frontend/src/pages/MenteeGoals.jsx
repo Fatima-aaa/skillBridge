@@ -59,36 +59,39 @@ function MenteeGoals() {
     }
   };
 
-  if (loading) return <div>Loading...</div>;
+  const getStatusLabel = (status) => {
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  if (loading) return <div className="loading">Loading...</div>;
 
   return (
     <div>
-      <button
-        className="btn btn-secondary"
-        onClick={() => navigate(-1)}
-        style={{ marginBottom: '20px' }}
-      >
+      <button className="btn btn-secondary btn-sm mb-6" onClick={() => navigate(-1)}>
         Back to Dashboard
       </button>
 
-      <h2 className="page-title">Mentee Goals</h2>
+      <div className="page-header flex-between">
+        <div>
+          <h1 className="page-title">Mentee Goals</h1>
+          <p className="page-subtitle">Create and track learning goals for your mentee</p>
+        </div>
+        {!showForm && (
+          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+            Create Goal
+          </button>
+        )}
+      </div>
+
       {error && <div className="error">{error}</div>}
 
-      {/* Create Goal Button/Form */}
-      {!showForm ? (
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowForm(true)}
-          style={{ marginBottom: '20px' }}
-        >
-          Create New Goal for Mentee
-        </button>
-      ) : (
-        <div className="card" style={{ marginBottom: '20px' }}>
+      {/* Create Goal Form */}
+      {showForm && (
+        <div className="section-card mb-6">
           <h3>Create New Goal</h3>
           <form onSubmit={handleCreateGoal}>
             <div className="form-group">
-              <label>Title</label>
+              <label>Goal Title</label>
               <input
                 type="text"
                 value={title}
@@ -109,51 +112,61 @@ function MenteeGoals() {
                 placeholder="Describe what the learner should accomplish..."
               />
             </div>
-            <button type="submit" className="btn btn-primary" disabled={formLoading}>
-              {formLoading ? 'Creating...' : 'Create Goal'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              style={{ marginLeft: '10px' }}
-              onClick={() => setShowForm(false)}
-            >
-              Cancel
-            </button>
+            <div className="flex gap-3">
+              <button type="submit" className="btn btn-primary" disabled={formLoading}>
+                {formLoading ? 'Creating...' : 'Create Goal'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowForm(false)}
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         </div>
       )}
 
       {goals.length === 0 ? (
-        <div className="card empty-state">
-          <p>No goals yet. Create a goal for your mentee above.</p>
+        <div className="card">
+          <div className="empty-state">
+            <h3>No goals yet</h3>
+            <p>Create a goal for your mentee to start tracking their progress</p>
+          </div>
         </div>
       ) : (
-        goals.map((goal) => (
-          <div className="card" key={goal._id}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-              <div>
-                <h3>{goal.title}</h3>
-                <span className={`badge badge-${goal.status}`}>{goal.status}</span>
+        <div className="goals-list">
+          {goals.map((goal) => (
+            <div className="card goal-card" key={goal._id}>
+              <div className="card-header">
+                <div>
+                  <h3 className="card-title">{goal.title}</h3>
+                  <p className="card-subtitle">
+                    Created {new Date(goal.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <span className={`badge badge-${goal.status}`}>
+                    {getStatusLabel(goal.status)}
+                  </span>
+                  <button
+                    className={`btn btn-sm ${goal.status === 'active' ? 'btn-success' : 'btn-secondary'}`}
+                    onClick={() => handleStatusToggle(goal._id, goal.status)}
+                  >
+                    {goal.status === 'active' ? 'Complete' : 'Reopen'}
+                  </button>
+                </div>
               </div>
-              <button
-                className={`btn ${goal.status === 'active' ? 'btn-success' : 'btn-secondary'}`}
-                onClick={() => handleStatusToggle(goal._id, goal.status)}
-              >
-                {goal.status === 'active' ? 'Mark Complete' : 'Reopen'}
-              </button>
+              <p className="card-body">{goal.description}</p>
+              <div className="card-footer">
+                <Link to={`/goals/${goal._id}`} className="btn btn-primary">
+                  View Progress
+                </Link>
+              </div>
             </div>
-            <p style={{ marginTop: '10px' }}>{goal.description}</p>
-            <small style={{ color: '#6c757d' }}>
-              Created: {new Date(goal.createdAt).toLocaleDateString()}
-            </small>
-            <div style={{ marginTop: '10px' }}>
-              <Link to={`/goals/${goal._id}`} className="btn btn-primary">
-                View Progress Updates
-              </Link>
-            </div>
-          </div>
-        ))
+          ))}
+        </div>
       )}
     </div>
   );
